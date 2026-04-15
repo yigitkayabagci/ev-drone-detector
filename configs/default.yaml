@@ -1,0 +1,49 @@
+# EV-Drone-Detector Configuration
+# Based on EV-SpSegNet (EV-UAV benchmark)
+# Source: https://github.com/ChenYichen9527/Ev-UAV
+
+model:
+  name: "spgnet"
+  width: 12                    # Base channel width
+  input_channel: 4             # (x, y, t, polarity)
+  dilations: [1, 2, 3, 4]     # Dilation rates per GDSC branch
+
+sensor:
+  resolution: [346, 260]      # DAVIS346 sensor (width, height)
+  whole_t: 8000                # Temporal window in ms
+  # Padded spatial shape for spconv (divisible by stride cascades)
+  # Original: [11*32, 9*32, 256*32] = [352, 288, 8192]
+  spatial_shape: [352, 288, 8192]
+
+data:
+  max_events: 700000           # Max events per sample
+  train_dir: "data/train"
+  val_dir: "data/val"
+  test_dir: "data/test"
+  num_workers: 4
+
+training:
+  epochs: 50
+  batch_size: 1
+  optimizer: "adam"
+  lr: 0.001
+  scheduler:
+    type: "step"
+    step_size: 10
+    gamma: 0.1
+  seed: 37
+  val_start_epoch: 40
+  save_dir: "checkpoints"
+
+loss:
+  stc:
+    k: 3                      # Spatial kernel size
+    tau: 5                     # Temporal kernel size
+
+detection:
+  seg_threshold: 0.5           # Segmentation probability threshold
+  min_cluster_size: 5          # Minimum events to form a detection
+  cluster_eps: 10.0            # DBSCAN eps in pixels
+  cluster_min_samples: 3       # DBSCAN min_samples
+  bbox_padding: 5              # Padding around detected bbox (pixels)
+  max_detections: 10           # Maximum detections per frame

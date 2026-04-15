@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.egg
+.uv/
+
+# Data and checkpoints
+data/
+checkpoints/
+*.pt
+*.pth
+
+# Visualizations
+visualizations/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/

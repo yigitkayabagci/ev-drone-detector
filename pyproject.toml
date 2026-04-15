@@ -1,0 +1,44 @@
+[project]
+name = "ev-drone-detector"
+version = "0.1.0"
+description = "Event-based drone detection using SPGNet for initial bounding box estimation from event camera data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Yigit Kayabagci" },
+]
+
+dependencies = [
+    "torch>=2.1.0",
+    "numpy>=1.24.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.65.0",
+    "scipy>=1.11.0",
+    "scikit-learn>=1.3.0",
+    "opencv-python>=4.8.0",
+    "matplotlib>=3.7.0",
+]
+
+[project.optional-dependencies]
+cuda = [
+    "spconv-cu120>=2.3.6",
+]
+colab = [
+    "spconv-cu118>=2.3.6",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ev_drone_detector"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
