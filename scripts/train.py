@@ -22,7 +22,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from ev_drone_detector.data.dataset import EvUAVDataset, SyntheticEventDataset
-from ev_drone_detector.data.event_repr import collate_events
+from ev_drone_detector.data.event_repr import collate_events, sparse_to_device
 from ev_drone_detector.losses.stc_loss import STCLoss
 from ev_drone_detector.models.spgnet import SPGNet
 from ev_drone_detector.utils.config import load_config
@@ -73,7 +73,7 @@ def train_one_epoch(
 
     pbar = tqdm(loader, desc=f"Epoch {epoch}")
     for batch in pbar:
-        voxel_tensor = batch["voxel_tensor"].to(device)
+        voxel_tensor = sparse_to_device(batch["voxel_tensor"], device)
         labels = batch["labels"].to(device)
         p2v_map = batch["p2v_map"].to(device)
 
@@ -124,7 +124,7 @@ def validate(
     n_batches = 0
 
     for batch in tqdm(loader, desc="Validating"):
-        voxel_tensor = batch["voxel_tensor"].to(device)
+        voxel_tensor = sparse_to_device(batch["voxel_tensor"], device)
         labels = batch["labels"].to(device)
         p2v_map = batch["p2v_map"].to(device)
 

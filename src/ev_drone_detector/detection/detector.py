@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from ev_drone_detector.data.event_repr import voxelize_events
+from ev_drone_detector.data.event_repr import sparse_to_device, voxelize_events
 from ev_drone_detector.detection.clustering import segmentation_to_detections
 from ev_drone_detector.models.spgnet import SPGNet
 from ev_drone_detector.utils.config import Config, load_config
@@ -100,7 +100,7 @@ class DroneDetector:
         )
 
         # Move to device
-        voxel_tensor = voxel_tensor.to(self.device)
+        voxel_tensor = sparse_to_device(voxel_tensor, self.device)
         p2v_map = p2v_map.to(self.device)
 
         # Forward pass
