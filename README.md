@@ -48,10 +48,17 @@ uv run python scripts/train.py --config configs/default.yaml --synthetic
 ### Detection
 
 ```bash
+# Single file, with PNG visualization
 uv run python scripts/detect.py \
     --checkpoint checkpoints/best_iou.pt \
     --input data/test/sample.npz \
     --visualize
+
+# Whole directory, write an MP4 of all frames
+uv run python scripts/detect.py \
+    --checkpoint checkpoints/best_iou.pt \
+    --input data/test/ \
+    --video detections.mp4 --fps 25
 ```
 
 ### As a library
