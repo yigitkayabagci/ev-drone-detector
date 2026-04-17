@@ -68,6 +68,15 @@ def voxelize_events(
     return voxel_tensor, p2v_map
 
 
+def sparse_to_device(
+    voxel_tensor: spconv.SparseConvTensor, device: torch.device | str,
+) -> spconv.SparseConvTensor:
+    """Move a SparseConvTensor to `device` (spconv has no .to() in 2.x)."""
+    voxel_tensor = voxel_tensor.replace_feature(voxel_tensor.features.to(device))
+    voxel_tensor.indices = voxel_tensor.indices.to(device)
+    return voxel_tensor
+
+
 def collate_events(batch: list[dict], spatial_shape: Sequence[int]) -> dict:
     """Stack per-sample dicts into a single sparse batch.
 
