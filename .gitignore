@@ -12,7 +12,7 @@ build/
 .uv/
 
 # Data and checkpoints
-data/
+/data/
 checkpoints/
 *.pt
 *.pth
