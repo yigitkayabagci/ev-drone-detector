@@ -13,9 +13,11 @@ import numpy as np
 import torch
 
 from ev_drone_detector.data.event_repr import sparse_to_device, voxelize_events
+from ev_drone_detector.data.preprocessing import EventPreprocessor
 from ev_drone_detector.detection.clustering import segmentation_to_detections
 from ev_drone_detector.models.spgnet import SPGNet
 from ev_drone_detector.utils.config import Config, load_config
+from ev_drone_detector.utils.eval import _bbox_iou
 
 
 class DroneDetector:
@@ -137,3 +139,74 @@ class DroneDetector:
         features = torch.from_numpy(data["evs_norm"][:, 0:4].astype(np.float32))
         coords = torch.from_numpy(data["ev_loc"].astype(np.int64))
         return self.detect(features, coords)
+
+    @torch.no_grad()
+    def detect_stream(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        t: np.ndarray,
+        p: np.ndarray,
+        preprocessor: EventPreprocessor,
+        nms_iou: float = 0.5,
+    ) -> list[dict]:
+        """Run tiled sliding-window inference on a raw event stream.
+
+        This is the canonical entry point for real-life event data from any
+        source — Prophesee EVK4 .hdf5, DAVIS .aedat, live cameras, etc.
+        Caller supplies four parallel arrays plus a preprocessor configured
+        for the source sensor; this method handles tiling, polarity / time
+        normalization, per-tile inference, mapping bboxes back to source
+        coordinates, and NMS across overlapping tiles.
+
+        Args:
+            x: (N,) int pixel x coords in source resolution.
+            y: (N,) int pixel y coords in source resolution.
+            t: (N,) int64 timestamps (microseconds, any reference frame).
+            p: (N,) polarity ({0, 1} or {-1, +1} — auto-detected).
+            preprocessor: Preconfigured `EventPreprocessor`.
+            nms_iou: IoU threshold above which two detections in the same
+                time window are deduplicated (higher-score one kept).
+
+        Returns:
+            List of detection dicts whose 'bbox' / 'center' are in
+            SOURCE-image pixel coords. Each detection also carries
+            't_window_us': (t_start, t_end) for the window it was found in.
+        """
+        all_dets: list[dict] = []
+        for tw in preprocessor(x, y, t, p):
+            local_dets = self.detect(tw.features, tw.coords)
+            x0, y0 = tw.tile_origin
+            for d in local_dets:
+                b = d["bbox"]
+                d["bbox"] = [b[0] + x0, b[1] + y0, b[2] + x0, b[3] + y0]
+                cx, cy = d["center"]
+                d["center"] = [cx + x0, cy + y0]
+                d["t_window_us"] = tw.t_window_us
+                all_dets.append(d)
+        return _nms_detections(all_dets, iou_threshold=nms_iou)
+
+
+def _nms_detections(
+    detections: list[dict], iou_threshold: float = 0.5,
+) -> list[dict]:
+    """Greedy NMS that only competes detections inside the same time window.
+
+    Detections in different time windows describe different temporal events,
+    so they should never suppress each other regardless of spatial overlap.
+    """
+    if not detections:
+        return []
+    sorted_dets = sorted(detections, key=lambda d: d["score"], reverse=True)
+    kept: list[dict] = []
+    for d in sorted_dets:
+        suppressed = False
+        for k in kept:
+            if d.get("t_window_us") != k.get("t_window_us"):
+                continue
+            if _bbox_iou(d["bbox"], k["bbox"]) > iou_threshold:
+                suppressed = True
+                break
+        if not suppressed:
+            kept.append(d)
+    return kept
