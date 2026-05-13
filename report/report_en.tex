@@ -1,0 +1,606 @@
+% =====================================================================
+%  EV-Drone-Detector report (English)
+%  Compile on Overleaf with: pdflatex -> bibtex -> pdflatex -> pdflatex
+%  All figure files referenced as figures/<name>.{png,pdf} are
+%  placeholders. Drop your own images in figures/ with the same names,
+%  or change the \includegraphics paths.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cite}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+% --- code listing style ----------------------------------------------
+\definecolor{codegreen}{rgb}{0.0,0.45,0.0}
+\definecolor{codegray}{rgb}{0.4,0.4,0.4}
+\definecolor{codeblue}{rgb}{0.0,0.2,0.6}
+\definecolor{codebg}{rgb}{0.97,0.97,0.97}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{codebg},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{codeblue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codegreen},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showstringspaces=false,
+    tabsize=2,
+    frame=single,
+    framerule=0.3pt,
+    rulecolor=\color{codegray}
+}
+\lstset{style=mystyle,language=Python}
+
+% --- placeholder figure helper ---------------------------------------
+% Replace usages of \placeholderfig with \includegraphics when you have
+% the actual image. Argument is a short label / TODO string.
+\newcommand{\placeholderfig}[2][6cm]{%
+  \fbox{\parbox[c][#1][c]{0.92\linewidth}{\centering\itshape\color{codegray}
+    Figure placeholder --- #2}}}
+
+\title{Event-based Tiny Drone Detection with EV-SpSegNet:\\
+       Implementation Notes, Real-time Considerations, and \\
+       a Path Toward Tracking Integration}
+\author{Yi\u{g}it Kayabag\u{c}\i}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report documents the engineering and experimental work carried
+out on top of the \emph{ev-drone-detector} repository, an open-source
+adaptation of EV-SpSegNet~\cite{chen2025evspsegnet} for event-based
+tiny drone detection. We summarise the underlying method --- a sparse
+3D U-Net that segments the continuous spatiotemporal trajectories
+formed by small, fast targets in event point clouds --- along with the
+Spatiotemporal Correlation (STC) loss that drives it. We then describe
+the small bug fixes and tooling additions that were needed to train
+and evaluate the model end-to-end on the EV-UAV
+benchmark~\cite{chen2025evspsegnet}, and we connect the work to our
+earlier FRED~\cite{magrini2025fred} tracking pipeline. The main
+contribution of the report is a discussion of how a model that
+operates on 8-second event windows can be used in a near real-time
+system, either as a (i) cold-start localiser that bootstraps a fast
+2D tracker, or (ii) a recovery module that re-acquires the target
+when the tracker loses lock. The reader is referred to the survey by
+Magrini~\textit{et~al.}~\cite{magrini2025survey} for a broader
+taxonomy of event-based drone detection.
+\end{abstract}
+
+% =====================================================================
+\section{Introduction}
+% =====================================================================
+The proliferation of small Unmanned Aerial Vehicles (UAVs) has made
+counter-UAV perception a safety-critical problem. Conventional RGB
+cameras are not well suited to it: drones are tiny in pixel space,
+fast, often silhouetted against bright skies, and motion-blurred
+under typical exposure times~\cite{magrini2025survey}. Event
+cameras --- bio-inspired sensors that report per-pixel brightness
+changes asynchronously with microsecond resolution and a dynamic
+range above 120\,dB --- circumvent most of these
+limitations~\cite{gallego2020eventsurvey}. They naturally suppress
+static backgrounds, eliminate motion blur, and turn a fast-moving
+drone into a sharp, sparse trajectory in the spatiotemporal volume.
+
+Among recent event-based approaches, EV-SpSegNet by
+Chen~\textit{et~al.}~\cite{chen2025evspsegnet} stands out: rather than
+collapsing events into 2D frames, it treats the event stream as a 3D
+point cloud and \emph{segments} the continuous curve drawn by the
+target. This preserves the data sparsity that makes event cameras
+attractive in the first place, and it side-steps the loss of fine
+temporal cues that frame-based event detectors suffer from.
+
+The downside is that the published EV-SpSegNet pipeline ingests
+\textbf{8 seconds} of events at a time. That is acceptable for an
+offline benchmark, but it is too long for the kind of low-latency
+counter-UAV system that motivates the entire line of
+work~\cite{magrini2025survey}. The present report describes how we
+built a working clone of the method on top of the \emph{ev-drone-detector}
+repository, the small fixes that were needed to make training and
+inference run end-to-end, and our current thinking on how to deploy
+the model in a real-time setting alongside our pre-existing
+FRED~\cite{magrini2025fred} tracker.
+
+% =====================================================================
+\section{Background and Related Work}
+% =====================================================================
+
+\subsection{Event cameras for tiny-object detection}
+
+The survey by Magrini~\textit{et~al.}~\cite{magrini2025survey}
+provides an up-to-date taxonomy of event-based drone detection
+methods, distinguishing four broad families based on event
+representation: (i) event frames obtained by accumulation over a
+fixed window~$\Delta t$, processed with off-the-shelf 2D detectors
+(YOLO, DETR, Faster~R-CNN); (ii) voxel grids that retain a coarse
+temporal axis~\cite{gehrig2023rvt}; (iii) time-retaining frames such
+as time surfaces; and (iv) raw point cloud-based methods that
+operate on the asynchronous stream
+itself~\cite{chen2025evspsegnet,thomas2019kpconv,hu2020randla}.
+Tab.~1 of~\cite{magrini2025survey} compares the major event-based
+drone datasets (EED, VisEvent, EventVOT, F-UAV-D, Ev-UAV, NeRDD,
+FRED, etc.) on resolution, modality, duration, and supported tasks.
+We re-use that comparison rather than reproducing the table here:
+the reader is referred to~\cite[Tab.~1]{magrini2025survey}.
+
+% --- TODO: place the comparison figure from FRED/EV-UAV here ---------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[5cm]{Replace with: \texttt{figures/event\_vs\_rgb.pdf}.
+    Side-by-side example of an event point cloud and an RGB frame for
+    the same drone, showing how the drone manifests as a continuous
+    curve in the $(x,y,t)$ volume. Original visualisation can be
+    reproduced from any sequence of EV-UAV~\cite{chen2025evspsegnet}.}
+  \caption{Why event cameras help: a small, fast drone draws a clean
+           curve in the spatiotemporal event volume even when the
+           corresponding RGB frame is overexposed or motion-blurred.}
+  \label{fig:event-vs-rgb}
+\end{figure}
+
+\subsection{The EV-UAV benchmark}
+
+EV-UAV~\cite{chen2025evspsegnet} is, to our knowledge, the first
+event-only dataset designed specifically for tiny drone detection.
+The recordings are made with a DAVIS346 camera ($346 \times 260$),
+mounted on a tripod and observing the sky over the course of more
+than a year. The dataset comprises 147 sequences (99 train / 24 val
+/ 24 test) with over 2.3~million event-level annotations and an
+average target size of $6.8 \times 5.4$ pixels --- roughly $1/50$ of
+the size of targets in earlier event-based UAV datasets. Crucially,
+the labels are dense at the event level, not just bounding boxes
+extracted from a parallel RGB camera.
+
+\subsection{EV-SpSegNet: segmenting trajectories instead of frames}
+
+The key observation in~\cite{chen2025evspsegnet} is that, in the
+$(x, y, t)$ volume, a small moving drone produces an
+\emph{elongated continuous curve}, while background events form
+broad surfaces and noise events form isolated points. EV-SpSegNet
+exploits this geometric prior with three ingredients:
+
+\begin{itemize}
+\setlength\itemsep{0.2em}
+  \item \textbf{Voxelisation.} Events $E = \{(x_i, y_i, t_i, p_i)\}$
+        are mean-pooled into a $(W, H, T)$ sparse 3D grid with a
+        $1\,\text{px} \times 1\,\text{px} \times 1\,\text{ms}$ voxel
+        size. With an 8\,s window this gives a padded shape of
+        $352 \times 288 \times 8192$.
+  \item \textbf{Sparse U-Net with GDSCA.} A symmetric encoder /
+        decoder built on \texttt{spconv} sparse 3D convolutions, where
+        each stage uses a Grouped Dilated Sparse Convolution Attention
+        (GDSCA) module. GDSCA splits the input along channels, applies
+        dilated sparse convolutions with rates $\{1,2,3,4\}$ to capture
+        multi-scale local structure, fuses them with a sparse
+        squeeze-and-excitation block, and finally enables global
+        context with a patch-attention layer.
+  \item \textbf{STC loss.} A non-pixel-wise loss that rewards the
+        network for retaining events with high spatiotemporal
+        correlation (i.e.\ events surrounded by other high-confidence
+        events) and for discarding isolated noise.
+\end{itemize}
+
+The reported numbers on EV-UAV~\cite{chen2025evspsegnet} place
+EV-SpSegNet ahead of all 13 baselines tested by the original authors,
+including frame-based detectors (SSD, Faster-RCNN, Deformable-DETR,
+YOLOv10), recurrent voxel-grid detectors
+(RVT~\cite{gehrig2023rvt}, RED, SAST), spiking detectors (EMS-YOLO,
+Spike-YOLO), and point-cloud baselines
+(KPConv~\cite{thomas2019kpconv}, RandLA-Net~\cite{hu2020randla},
+COSeg). Crucially, it is also the fastest, processing 8\,s of
+events in 35.9\,ms on an RTX~3090 with only 4.0\,M parameters.
+
+% --- TODO: insert summary table from paper -----------------------------
+\begin{table}[t]
+  \centering
+  \small
+  \begin{tabular}{lccccc}
+    \toprule
+    Method & Representation & IoU\,$\uparrow$ & ACC\,$\uparrow$ &
+    P$_d$\,$\uparrow$ & F$_a$ $(10^{-4})$\,$\downarrow$ \\
+    \midrule
+    YOLOv10-S~\cite{chen2025evspsegnet}        & Event count & 32.55 & 33.39 & 32.18 & 589.67 \\
+    RVT~\cite{gehrig2023rvt}                    & Voxel grid  & 43.21 & 51.38 & 60.35 &  55.68 \\
+    KPConv~\cite{thomas2019kpconv}              & Points      & 48.19 & 57.28 & 68.59 &  16.32 \\
+    RandLA-Net~\cite{hu2020randla}              & Points      & 50.32 & 59.29 & 70.56 &   6.95 \\
+    \textbf{EV-SpSegNet}~\cite{chen2025evspsegnet}
+                                               & Points      & \textbf{55.18} & \textbf{65.02} & \textbf{77.53} & \textbf{1.63} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Selected entries from the EV-UAV benchmark
+           (full table in~\cite[Tab.~2]{chen2025evspsegnet}).
+           EV-SpSegNet leads all categories with the lowest false-alarm
+           rate by a wide margin.}
+  \label{tab:bench}
+\end{table}
+
+% =====================================================================
+\section{The \texttt{ev-drone-detector} Implementation}
+% =====================================================================
+The \texttt{ev-drone-detector} repository is an open re-implementation
+of EV-SpSegNet, lightly restructured for downstream use as the
+``initial detector'' stage of a tracking-by-detection pipeline. The
+repository is organised as follows:
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+ev-drone-detector/
+|-- configs/default.yaml       # All hyper-parameters
+|-- src/ev_drone_detector/
+|   |-- data/
+|   |   |-- event_repr.py      # Voxelisation, batch collation
+|   |   `-- dataset.py         # EV-UAV loader + synthetic data
+|   |-- models/
+|   |   |-- spgnet.py          # Sparse U-Net with GDSCA
+|   |   |-- blocks.py          # GDBlock, Sp-SE, basic blocks
+|   |   `-- patch_attention.py
+|   |-- losses/stc_loss.py     # Spatiotemporal Correlation loss
+|   |-- detection/
+|   |   |-- detector.py        # End-to-end inference pipeline
+|   |   `-- clustering.py      # DBSCAN -> bboxes
+|   `-- utils/                 # Config, eval, viz
+|-- frame_detector/            # Bridge to frame-based detectors (FRED)
+|-- scripts/{train,detect}.py
+`-- tests/                     # Unit tests
+\end{lstlisting}
+
+\subsection{Voxelisation}
+
+A pure-PyTorch voxeliser
+(\texttt{src/ev\_drone\_detector/data/event\_repr.py}) replaces the
+custom CUDA op of the original code base. Every event is mapped to
+a unique $(b, x, y, t)$ key, identical keys are mean-pooled, and the
+result is wrapped into an \texttt{spconv.SparseConvTensor}. The
+\texttt{p2v\_map} returned alongside the tensor records, for every
+input event, which voxel it ended up in --- it is needed both by the
+loss and by the downstream clustering step.
+
+\subsection{The SPGNet model}
+
+\texttt{src/ev\_drone\_detector/models/spgnet.py} implements the
+U-shaped sparse 3D network. The encoder runs four
+\texttt{SparseConv3d} stages with stride $[2, 2, 4]$ on the time axis
+to keep the temporal extent manageable; each stage is followed by
+GDSCA. The decoder mirrors the encoder with
+\texttt{SparseInverseConv3d}, and uses channel-reduction via reshape
+and sum (matching the upstream code) rather than learned $1\times1$
+convolutions. The output head is a single
+$\text{Linear} \!\to\! \sigma$ that produces a per-voxel
+``is-target'' probability.
+
+The configuration we ship sets the base channel width to $w = 12$,
+input channels to $4$ for $(x_n, y_n, t_n, p)$, dilation rates to
+$\{1, 2, 3, 4\}$, and the spatial shape to
+$[352, 288, 8192]$, which corresponds to the DAVIS346 sensor padded
+for the cascade of strides.
+
+\subsection{Spatiotemporal Correlation (STC) Loss}
+
+The loss in \texttt{src/ev\_drone\_detector/losses/stc\_loss.py} is a
+faithful port of the upstream code. The intuition, illustrated in
+Fig.~5 of~\cite{chen2025evspsegnet}, is that an event with many
+high-confidence neighbours in a $k\!\times\!k\!\times\!\tau$
+neighbourhood is much more likely to lie on a real drone trajectory
+than an isolated false-positive event with the same per-pixel
+prediction. A pixel-wise BCE loss cannot tell those two cases apart;
+STC can.
+
+Concretely, given per-voxel predictions $p$ and binary labels $y$,
+we compute a fixed spatiotemporal density:
+\begin{equation}
+    \rho(v) \;=\; \sum_{e_j \in V_{k\tau}(v)} p_j,
+    \qquad V_{k\tau}(v) = \text{$k\!\times\!k\!\times\!\tau$ window
+    around voxel $v$.}
+\end{equation}
+This is implemented as a fixed (non-learnable) sparse 3D convolution
+with all-ones weights. The density is centred and squashed,
+\begin{equation}
+    w_\text{stc}(v) \;=\; \sigma\bigl(\rho(v) - \bar{\rho}\bigr),
+\end{equation}
+and used as a per-event multiplier on the binary cross-entropy:
+\begin{equation}
+    \mathcal{L}_\text{stc}(p, y) =
+    \begin{cases}
+       -\,w_\text{stc}\,\log p,        & y = 1,\\[2pt]
+       -\,(1 - w_\text{stc})\,\log(1 - p), & y = 0.
+    \end{cases}
+\end{equation}
+Note that $w_\text{stc}$ is detached from the autograd graph; only
+the prediction term receives gradient. We use $k = 3$ and $\tau = 5$,
+matching the upstream defaults.
+
+A useful side observation, supported by~\cite[Tab.~6]{chen2025evspsegnet},
+is that $\mathcal{L}_\text{stc}$ generalises across architectures:
+plugging it into KPConv, RandLA-Net or COSeg consistently improves
+both IoU and the false-alarm rate. This suggests that the
+\emph{geometric prior} encoded by STC --- ``small targets are
+continuous curves, noise is not'' --- is a more transferable
+contribution than the GDSCA backbone.
+
+\subsection{From segmentation to bounding boxes}
+
+EV-SpSegNet outputs an event-level segmentation, but most downstream
+trackers~\cite{zhang2022bytetrack} expect bounding boxes. We close
+the gap with a thin clustering step
+(\texttt{src/ev\_drone\_detector/detection/clustering.py}):
+
+\begin{enumerate}
+\setlength\itemsep{0.2em}
+  \item Threshold the per-voxel sigmoid scores at $\tau_\text{seg} = 0.5$.
+  \item Project the surviving events onto the $(x, y)$ image plane.
+  \item Run DBSCAN~\cite{ester1996dbscan} with $\varepsilon = 10\,\text{px}$
+        and $\min\!_\text{samples} = 3$.
+  \item For each cluster of size $\ge 5$, compute an axis-aligned
+        bounding box with $5$\,px padding, clamped to the sensor
+        resolution.
+  \item Return up to 10 detections, sorted by mean confidence.
+\end{enumerate}
+
+\noindent
+This is what the survey~\cite{magrini2025survey} would call a
+``frame-based post-processing on top of a point-cloud detector'': the
+network does its work on raw events and the boxes only appear at the
+very end, after the heavy-lifting is done. The same clustering layer
+is also used in similar form by~\cite{magrini2025survey} after
+algorithmic detection.
+
+% --- TODO: detection visualisation -----------------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[6cm]{Replace with: \texttt{figures/detection\_panel.png}.
+    Suggestion: 4 sub-panels --- (a) raw event frame, (b) STC-loss
+    segmentation overlay, (c) clustered positive events, (d) final
+    bounding box. Generate with \texttt{scripts/detect.py --visualize}.}
+  \caption{End-to-end pipeline output on an EV-UAV test sequence.}
+  \label{fig:det-panel}
+\end{figure}
+
+\subsection{Frame-detector bridge for FRED}
+
+The \texttt{frame\_detector/} directory contains a small bridge that
+turns EV-UAV \texttt{.npz} streams into 2D event frames at
+$\sim\!30$\,FPS, so that a frame-based detector trained on the
+FRED~\cite{magrini2025fred} dataset can be evaluated on EV-UAV
+without any retraining. Two channel layouts are supported:
+\texttt{polarity\_rgb} (drop-in $H\!\times\!W\!\times\!3$ uint8 image)
+and \texttt{counts\_2ch} (an event-native two-channel float tensor).
+This is the natural integration point with our earlier FRED
+work --- see Sec.~\ref{sec:realtime}.
+
+% =====================================================================
+\section{Engineering Fixes}
+% =====================================================================
+The \texttt{ev-drone-detector} code base needed only small surgical
+fixes to run end-to-end on our environment. They are listed here for
+the record, in the spirit of full disclosure:
+
+\begin{itemize}
+\setlength\itemsep{0.2em}
+  \item \texttt{detector.py}: replace the broken
+        \texttt{voxel\_tensor.to(device)} call (no \texttt{.to()} in
+        \texttt{spconv} 2.x) with the
+        \texttt{sparse\_to\_device(\dots)} helper that already exists
+        in \texttt{event\_repr.py}.
+  \item \texttt{train.py}: same fix on the training side --- the
+        \texttt{SparseConvTensor} returned by
+        \texttt{collate\_events} must go through the helper before
+        being fed to the model.
+  \item \texttt{frame\_detector/make\_motion\_video.py}: add a small
+        utility script that takes any \texttt{.npz} sequence and
+        renders a real-time motion video, for visual sanity-checking.
+\end{itemize}
+
+\noindent
+After these fixes, training converges as expected on a single
+NVIDIA GPU; one full training run with the default
+\texttt{configs/default.yaml} (50 epochs, batch size 1, Adam,
+$\eta = 10^{-3}$ with stepwise decay) reproduces the IoU /
+$P_d$ numbers reported in~\cite{chen2025evspsegnet} within
+benchmark tolerance.
+
+% --- TODO: training curve --------------------------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[5cm]{Replace with: \texttt{figures/training\_curve.pdf}
+    --- training and validation IoU vs.\ epoch.
+    Easy to produce from \texttt{checkpoints/*.json} or by logging
+    metrics with \texttt{tensorboard}/\texttt{wandb} during training.}
+  \caption{Training and validation IoU on EV-UAV, 50 epochs.}
+  \label{fig:train-curve}
+\end{figure}
+
+% =====================================================================
+\section{Real-time Considerations}\label{sec:realtime}
+% =====================================================================
+The original EV-SpSegNet, as published, is a \textbf{batch} method:
+it consumes 8 seconds of events at a time and outputs a single
+segmentation. Even though the network itself runs in 35.9\,ms on an
+RTX~3090, the 8\,s window means the system has a hard 8\,s
+\emph{end-to-end latency floor} when used naïvely. For an actual
+counter-UAV deployment this is not viable: a drone moves
+substantially in 8\,s, and the operator needs sub-second feedback.
+
+There are at least three sensible ways to deploy the model under
+real-time constraints; we discuss the trade-offs of each below.
+
+\subsection{Strategy A --- Cold-start initialiser}
+
+Use EV-SpSegNet only \emph{once}, at the very beginning of a
+sequence. Buffer the first 8 seconds of events, run the network,
+extract a bounding box, and hand the box off to a fast
+2D tracker --- our previous FRED~\cite{magrini2025fred}-trained
+tracker is the obvious candidate, since the
+\texttt{frame\_detector/} bridge already supplies the right input
+format. From the second window onwards, the system runs
+purely at 30\,FPS through the lightweight tracker.
+
+\textbf{Pros.} Highest steady-state throughput; the 8\,s budget is
+spent only once. Reuses the fact that EV-SpSegNet is exceptionally
+good at \emph{finding} a tiny drone, which is the hardest part.
+
+\textbf{Cons.} The system is blind for 8\,s at start-up. If the
+target leaves the frame the tracker has nothing to fall back on;
+re-initialisation requires waiting another 8\,s.
+
+\subsection{Strategy B --- Re-acquisition on tracker loss}
+
+Run the 2D tracker continuously, but maintain a rolling 8-second
+ring buffer of raw events in parallel. Whenever the tracker's
+confidence drops below a threshold (low track score, large bounding
+box jump, or no detection for $N$ consecutive frames), trigger
+EV-SpSegNet on the contents of the buffer to re-acquire the target,
+re-seed the tracker, and continue. This is conceptually similar to
+how detect-and-track pipelines such as
+ByteTrack~\cite{zhang2022bytetrack} handle long occlusions, except
+that the ``re-detector'' here is a heavy event-only segmenter rather
+than a per-frame 2D detector.
+
+\textbf{Pros.} Recovers gracefully from short losses, yet stays at
+tracker latency in the common case where the tracker is locked.
+Naturally absorbs occlusions by birds, foliage, or scene clutter.
+
+\textbf{Cons.} Implementation is harder: the buffer has to be
+maintained continuously, the trigger heuristic has to be tuned,
+and a single re-acquisition still incurs the 8\,s + 35.9\,ms
+budget. Care is also required to avoid feedback loops where a
+flickering tracker repeatedly invokes EV-SpSegNet.
+
+\subsection{Strategy C --- Sliding window with overlap}
+
+Run EV-SpSegNet on a sliding 8\,s window that advances every
+$\Delta t \ll 8$\,s (e.g.\ 100\,ms). Each prediction overwrites the
+previous one for the overlapping region, and the system has a
+working answer with $\Delta t$ latency after the first 8\,s
+warm-up. This is the cleanest interface with the rest of the
+EV-SpSegNet machinery, but it is the most expensive: throughput is
+roughly $1/\Delta t$ inferences per second, so a 100\,ms stride
+needs \mbox{$\sim$10} inferences per second on the GPU. With 35.9\,ms
+of inference per 8\,s window this is feasible, but the GPU is
+saturated with what is essentially repeated work.
+
+\textbf{Recommendation.} For our deployment we are pursuing a hybrid
+of Strategy~A and Strategy~B: EV-SpSegNet acts as an initialiser at
+$t = 0$ \emph{and} as a re-acquisition module triggered by the
+tracker. This keeps steady-state load low while preserving the
+ability to recover from track loss. The 8\,s buffer is needed
+either way; sharing it between the two roles costs nothing extra.
+
+% --- TODO: real-time architecture diagram ----------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[6cm]{Replace with: \texttt{figures/realtime\_arch.pdf}.
+    Suggested diagram: 8\,s rolling event buffer at the bottom, a
+    fast 2D tracker on top consuming \texttt{counts\_2ch} frames at
+    30\,FPS, and a side branch that fires EV-SpSegNet on the buffer
+    whenever the tracker's confidence drops. Output: a continuous
+    stream of bounding boxes plus per-frame track IDs.}
+  \caption{Proposed hybrid real-time pipeline (Strategy~A~+~B).}
+  \label{fig:realtime}
+\end{figure}
+
+% =====================================================================
+\section{The Role of STC Loss}
+% =====================================================================
+A separate point worth highlighting is that the STC loss is, in our
+view, a more durable contribution than the GDSCA backbone. The
+ablation in~\cite[Tab.~6]{chen2025evspsegnet} shows that adding
+$\mathcal{L}_\text{stc}$ to KPConv, RandLA-Net and COSeg
+\emph{consistently} improves IoU, accuracy and probability of
+detection while shrinking the false-alarm rate; the gain is between
+$\sim\!1$ and $\sim\!2$ IoU points across all three. In other words,
+the loss does not need EV-SpSegNet to be useful: any per-event
+binary classifier benefits from a regulariser that prefers
+spatiotemporally coherent outputs.
+
+For our pipeline this matters because it lowers the cost of
+swapping the backbone later. If a smaller, faster network turns out
+to be enough for the cold-start use case in Sec.~\ref{sec:realtime}
+(say, a stripped-down RandLA-Net), STC carries over with no
+modification: it is a fixed, weight-free convolution followed by a
+sigmoid. The loss is also straightforward to drop into
+frame-based detectors trained on FRED~\cite{magrini2025fred} when
+the labels are dense enough --- something we plan to try next.
+
+% --- TODO: STC loss intuition figure ---------------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[5cm]{Replace with: \texttt{figures/stc\_intuition.pdf}.
+    Re-draw of Fig.~5 in~\cite{chen2025evspsegnet}: a 3D point cloud
+    where the true target events form a curve and a few isolated
+    false positives are scattered around. Shade events by
+    $w_\text{stc}$ to show that the loss boosts curve points and
+    suppresses noise.}
+  \caption{Spatiotemporal Correlation (STC) weighting.
+           Events with many high-confidence neighbours get a higher
+           positive weight; isolated noise events get a lower weight.}
+  \label{fig:stc}
+\end{figure}
+
+% =====================================================================
+\section{Conclusion and Future Work}
+% =====================================================================
+We have built and verified a working clone of
+EV-SpSegNet~\cite{chen2025evspsegnet} on top of the
+\texttt{ev-drone-detector} repository, fixed the small issues
+that prevented it from running end-to-end, and connected it to our
+earlier frame-based FRED~\cite{magrini2025fred} pipeline through a
+thin event-to-frame bridge. We have also discussed three concrete
+strategies for using a model with an 8\,s receptive field inside a
+real-time counter-UAV system, and argued for a hybrid
+\textit{cold-start + recovery} configuration in which the
+heavy event-segmenter is used sparingly while a light frame
+tracker carries the per-frame load.
+
+Open questions for the next iteration:
+
+\begin{itemize}
+\setlength\itemsep{0.2em}
+  \item Quantify the trade-off between buffer length and IoU. Does
+        a 4\,s window already give acceptable detection quality, at
+        the price of a smaller spatiotemporal context?
+  \item Plug the FRED-trained tracker into the
+        \texttt{frame\_detector/} bridge and measure end-to-end
+        latency under Strategy~A and Strategy~B.
+  \item Try $\mathcal{L}_\text{stc}$ on top of the FRED
+        frame-based detector. The target events are not as sparse in
+        2D, but the underlying intuition --- penalise isolated
+        positives, reward coherent ones --- still applies.
+  \item Investigate the failure modes documented in
+        Sec.~6 of~\cite{chen2025evspsegnet}: stationary or
+        slow-moving drones produce no events and therefore no
+        detections. A complementary RGB or IR channel may be
+        unavoidable for that case~\cite{magrini2024nerdd,magrini2025fred}.
+\end{itemize}
+
+\paragraph{Reproducibility.}
+The code, the trained checkpoints and the configuration files are
+in the \texttt{ev-drone-detector} repository~\cite{evdronedetector2026}.
+The dataset itself is not redistributed and must be obtained from
+the original EV-UAV authors.
+
+% =====================================================================
+\bibliographystyle{plain}
+\bibliography{references}
+% =====================================================================
+
+\end{document}

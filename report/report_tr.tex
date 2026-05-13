@@ -1,0 +1,686 @@
+% =====================================================================
+%  EV-Drone-Detector raporu (Türkçe)
+%  Overleaf'te derlemek için: pdflatex -> bibtex -> pdflatex -> pdflatex
+%  figures/<isim>.{png,pdf} olarak referanslanan tüm dosyalar yer
+%  tutucudur. Kendi görsellerinizi figures/ klasörüne aynı isimle
+%  bırakın ya da \includegraphics yollarını değiştirin.
+% =====================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[turkish]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cite}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+% --- kod listeleme stili ---------------------------------------------
+\definecolor{codegreen}{rgb}{0.0,0.45,0.0}
+\definecolor{codegray}{rgb}{0.4,0.4,0.4}
+\definecolor{codeblue}{rgb}{0.0,0.2,0.6}
+\definecolor{codebg}{rgb}{0.97,0.97,0.97}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{codebg},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{codeblue},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codegreen},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showstringspaces=false,
+    tabsize=2,
+    frame=single,
+    framerule=0.3pt,
+    rulecolor=\color{codegray}
+}
+\lstset{style=mystyle,language=Python}
+
+% --- yer tutucu görsel makrosu ---------------------------------------
+% Görsel hazır olduğunda \placeholderfig yerine doğrudan
+% \includegraphics kullanın. Argüman kısa bir açıklama / TODO metnidir.
+\newcommand{\placeholderfig}[2][6cm]{%
+  \fbox{\parbox[c][#1][c]{0.92\linewidth}{\centering\itshape\color{codegray}
+    Görsel yer tutucusu --- #2}}}
+
+\title{Olay Kameraları ile Küçük \.{I}HA Tespiti --- EV-SpSegNet:\\
+       Uygulama Notları, Ger\c{c}ek-Zamanl{\i} \c{C}al{\i}\c{s}ma
+       \"Onerileri ve Takip Sistemine Ba\u{g}lant{\i}}
+\author{Yi\u{g}it Kayabag\u{c}\i}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Bu rapor, olay kameralar{\i} ile k\"u\c{c}\"uk \.{I}HA tespiti i\c{c}in
+EV-SpSegNet~\cite{chen2025evspsegnet} mimarisini esas alan
+\emph{ev-drone-detector} deposu \"uzerinde y\"ur\"ut\"ulen
+m\"uhendislik ve deneysel \c{c}al{\i}\c{s}may{\i} belgelemektedir.
+Y\"ontemin temelini --- olay nokta bulutu i\c{c}inde k\"u\c{c}\"uk ve
+h{\i}zl{\i} hedeflerin olu\c{s}turdu\u{g}u s\"urekli e\u{g}rileri
+segmente eden seyrek (sparse) 3D U-Net ile bunu y\"onlendiren
+Uzay-Zamansal Korelasyon (STC) kayb{\i} --- \"ozetliyoruz. Modeli
+EV-UAV~\cite{chen2025evspsegnet} \"ol\c{c}ekme zemininde bir u\c{c}tan
+di\u{g}er u\c{c}a e\u{g}itip de\u{g}erlendirebilmek i\c{c}in
+yapt{\i}\u{g}{\i}m{\i}z k\"u\c{c}\"uk hata d\"uzeltmelerini ve ek
+ara\c{c}lar{\i} a\c{c}{\i}kl{\i}yoruz; daha \"once geli\c{s}tirdi\u{g}imiz
+FRED~\cite{magrini2025fred} tabanl{\i} takip ho\c{s}-uyum y{\i}\u{g}{\i}n{\i}
+ile ba\u{g}lant{\i}y{\i} kuruyoruz. Raporun en kritik k{\i}sm{\i}, 8
+saniyelik olay penceresi ile \c{c}al{\i}\c{s}an bir modelin
+ger\c{c}e\u{g}e yak{\i}n zamanl{\i} bir sistemde nas{\i}l
+kullan{\i}labilece\u{g}ini tart{\i}\c{s}t{\i}\u{g}{\i}m{\i}z
+b\"ol\"umd\"ur: hedefin \emph{ilk konumunu} yakalayarak h{\i}zl{\i} bir
+2B takip\c{c}iye devreden bir \c{c}al{\i}\c{s}t{\i}rma kipi ile takip
+sapt{\i}\u{g}{\i}nda hedefi yeniden bulmaya yarayan bir kurtarma
+modu \"ozellikle vurgulanmaktad{\i}r. Olay tabanl{\i} \.{I}HA tespiti
+i\c{c}in geni\c{s} bir de\u{g}erlendirme \i{c}in
+Magrini~\textit{ve di\u{g}.}~\cite{magrini2025survey} taraf{\i}ndan
+yap{\i}lan derleme \c{c}al{\i}\c{s}mas{\i}na bak{\i}lmas{\i} \"onerilir.
+\end{abstract}
+
+% =====================================================================
+\section{Giri\c{s}}
+% =====================================================================
+K\"u\c{c}\"uk \.{I}HA'lar{\i}n h{\i}zla yayg{\i}nla\c{s}mas{\i},
+kar\c{s}{\i}-\.{I}HA alg{\i}lamas{\i}n{\i} g\"uvenlik a\c{c}{\i}s{\i}ndan
+kritik bir problem h\^aline getirdi. S{\i}rad{\i}\c{s}{\i} \.{I}HA
+hedefleri klasik RGB kameralar i\c{c}in zordur: \c{c}ok k\"u\c{c}\"uk
+g\"or\"un\"urler, h{\i}zl{\i} hareket ederler, parlak bir g\"oky\"uz\"u
+\"on\"unde silikle\c{s}irler ve s{\i}rada\c{s}an pozlama s\"ureleriyle
+hareket bulan{\i}kl{\i}\u{g}{\i}na maruz
+kal{\i}rlar~\cite{magrini2025survey}. Olay kameralar{\i} --- her piksel
+i\c{c}in ayd{\i}nl{\i}k de\u{g}i\c{s}imini mikrosaniye \c{c}\"oz\"un\"url\"u\u{g}\"u
+ve 120\,dB\,$+$ dinamik aral{\i}kla asenkron olarak raporlayan
+bio-esinlenmeli sens\"orler --- bu k{\i}s{\i}tlamalar{\i}n
+\c{c}o\u{g}unu do\u{g}al olarak a\c{s}arlar~\cite{gallego2020eventsurvey}.
+Statik arka plan{\i} bast{\i}r{\i}r, hareket bulan{\i}kl{\i}\u{g}{\i}n{\i}
+ortadan kald{\i}r{\i}r ve h{\i}zla hareket eden bir \.{I}HA'y{\i} uzay-zaman
+hacminde keskin ve seyrek bir y\"or\"unge olarak ortaya \c{c}{\i}kar{\i}rlar.
+
+Son d\"onem yakla\c{s}{\i}mlar i\c{c}inde
+Chen~\textit{ve di\u{g}.}~\cite{chen2025evspsegnet} taraf{\i}ndan
+\"onerilen EV-SpSegNet \"one \c{c}{\i}kmaktad{\i}r. Bu y\"ontem,
+olaylar{\i} 2B \c{c}er\c{c}evelere y{\i}\u{g}mak yerine, olay ak{\i}\c{s}{\i}n{\i}
+3B nokta bulutu olarak ele al{\i}r ve hedefin \c{c}izdi\u{g}i s\"urekli
+e\u{g}riyi \emph{segmente} eder. B\"oylece olay kameralar{\i}n{\i}
+de\u{g}erli k{\i}lan veri seyrekli\u{g}i korunur ve \c{c}er\c{c}eve
+tabanl{\i} olay dedekt\"orlerinin kaybetti\u{g}i ince zamansal
+ipu\c{c}lar{\i} ge\c{c}erlili\u{g}ini s\"urd\"ur\"ur.
+
+Yay{\i}nlanan EV-SpSegNet boru hatt{\i}n{\i}n dezavantaj{\i},
+girdisini \textbf{8 saniyelik} olay pencereleri h\^alinde
+i\c{s}lemesidir. Bu, \c{c}evrim-d{\i}\c{s}{\i} (offline) bir kar\c{s}{\i}la\c{s}t{\i}rma
+i\c{c}in kabul edilebilir; ancak motivasyonu olu\c{s}turan kar\c{s}{\i}-\.{I}HA
+sistemleri i\c{c}in d\"u\c{s}\"uk gecikme \c{s}artlar{\i} ile
+\c{c}eli\c{s}ir~\cite{magrini2025survey}. Bu raporda,
+\emph{ev-drone-detector} deposunda y\"ontemin \c{c}al{\i}\c{s}an bir
+kopyas{\i}n{\i} nas{\i}l kurdu\u{g}umuzu, e\u{g}itim ve \c{c}{\i}kar{\i}m{\i}n
+u\c{c}tan u\c{c}a \c{c}al{\i}\c{s}mas{\i} i\c{c}in gerekli k\"u\c{c}\"uk
+d\"uzeltmeleri ve daha \"onceden var olan FRED~\cite{magrini2025fred}
+takip\c{c}imizle modeli ger\c{c}e\u{g}e yak{\i}n zamanl{\i} bir sistemde
+nas{\i}l birle\c{s}tirebilece\u{g}imize dair g\"uncel
+d\"u\c{s}\"uncelerimizi anlat{\i}yoruz.
+
+% =====================================================================
+\section{Arka Plan ve \.{I}lgili \c{C}al{\i}\c{s}malar}
+% =====================================================================
+
+\subsection{Olay kameralar{\i} ve k\"u\c{c}\"uk hedef tespiti}
+
+Magrini~\textit{ve di\u{g}.}~\cite{magrini2025survey}'nin derlemesi,
+olay tabanl{\i} \.{I}HA tespitini olay temsiline g\"ore d\"ort ana
+aileye ay{\i}rmaktad{\i}r: (i) sabit bir $\Delta t$ \"uzerinde
+olaylar{\i} biriktirip elde edilen \emph{olay \c{c}er\c{c}eveleri}
+\"uzerinde haz{\i}r 2B dedekt\"orleri (YOLO, DETR, Faster~R-CNN)
+\c{c}al{\i}\c{s}t{\i}ranlar; (ii) zaman eksenini kaba bir bi\c{c}imde
+koruyan voksel {\i}zgaralar{\i}~\cite{gehrig2023rvt}; (iii) zaman
+y\"uzeyleri gibi \emph{zaman koruyan \c{c}er\c{c}eveler}; ve (iv)
+asenkron ak{\i}\c{s}{\i}n kendisi \"uzerinde \c{c}al{\i}\c{s}an saf
+nokta-bulutu y\"ontemleri~\cite{chen2025evspsegnet,thomas2019kpconv,hu2020randla}.
+\cite[Tab.~1]{magrini2025survey}'de olay tabanl{\i} \.{I}HA veri
+k\"umeleri (EED, VisEvent, EventVOT, F-UAV-D, Ev-UAV, NeRDD, FRED,
+vb.) \c{c}\"oz\"un\"url\"uk, kip, s\"ure ve desteklenen g\"orevler
+bak{\i}m{\i}ndan kar\c{s}{\i}la\c{s}t{\i}r{\i}lmaktad{\i}r. Bu raporda
+tabloyu yeniden \"uretmek yerine ilgili kayna\u{g}a y\"onlendiriyoruz:
+\cite[Tab.~1]{magrini2025survey}.
+
+% --- TODO: olay vs RGB kar\c{s}{\i}la\c{s}t{\i}rma g\"orseli ---------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[5cm]{Yerine: \texttt{figures/event\_vs\_rgb.pdf}.
+    Ayn{\i} \.{I}HA i\c{c}in olay nokta bulutu ile RGB
+    \c{c}er\c{c}evesinin yan yana \"orne\u{g}i; \.{I}HA'n{\i}n
+    $(x,y,t)$ hacminde s\"urekli bir e\u{g}ri olarak
+    g\"or\"und\"u\u{g}\"unu g\"osterir. EV-UAV~\cite{chen2025evspsegnet}
+    test dizilerinden herhangi biri kullan{\i}labilir.}
+  \caption{Olay kameralar{\i}n{\i}n \"u\c{s}t\"unl\"u\u{g}\"u: k\"u\c{c}\"uk
+           ve h{\i}zl{\i} bir \.{I}HA, RGB \c{c}er\c{c}evesi
+           a\c{s}{\i}r{\i} pozlanm{\i}\c{s} ya da hareket
+           bulan{\i}kla\c{s}m{\i}\c{s} olsa bile uzay-zaman olay
+           hacminde temiz bir e\u{g}ri \c{c}izer.}
+  \label{fig:event-vs-rgb}
+\end{figure}
+
+\subsection{EV-UAV \"ol\c{c}ekme zemini}
+
+EV-UAV~\cite{chen2025evspsegnet}, bilgimiz dahilinde k\"u\c{c}\"uk
+\.{I}HA tespiti i\c{c}in \"ozel olarak tasarlanan ilk yaln{\i}zca-olay
+veri k\"umesidir. Kay{\i}tlar bir tripod \"uzerine monte edilmi\c{s}
+DAVIS346 kameras{\i} ($346 \times 260$) ile ve bir y{\i}ldan uzun bir
+s\"ure boyunca al{\i}nm{\i}\c{s}t{\i}r. Veri k\"umesi 99 e\u{g}itim,
+24 do\u{g}rulama ve 24 test olmak \"uzere 147 dizi, $2{,}3$
+milyondan fazla olay-d\"uzeyi etiket ve ortalama $6{,}8 \times 5{,}4$
+piksel boyutunda hedef i\c{c}erir; bu, \"onceki olay tabanl{\i} \.{I}HA
+veri k\"umelerinin yakla\c{s}{\i}k $1/50$'sidir. \"Ozellikle dikkat
+edilmesi gereken nokta, etiketlerin paralel bir RGB kameradan
+ta\c{s}{\i}nan kutu etiketleri de\u{g}il, do\u{g}rudan \emph{olay
+d\"uzeyinde yo\u{g}un} olu\c{s}udur.
+
+\subsection{EV-SpSegNet: \c{c}er\c{c}eve yerine y\"or\"unge segmentasyonu}
+
+\cite{chen2025evspsegnet}'in temel g\"ozlemi, $(x, y, t)$ hacminde
+k\"u\c{c}\"uk hareketli bir \.{I}HA'n{\i}n \emph{uzun ve s\"urekli bir
+e\u{g}ri} olu\c{s}turmas{\i}; arka plan{\i}n geni\c{s} y\"uzeyler,
+g\"ur\"ult\"un\"un ise yal{\i}t{\i}lm{\i}\c{s} noktalar olu\c{s}turmas{\i}d{\i}r.
+EV-SpSegNet bu geometrik \"on bilgiyi \"u\c{c} bile\c{s}enle
+de\u{g}erlendirir:
+
+\begin{itemize}
+\setlength\itemsep{0.2em}
+  \item \textbf{Vokselle\c{s}tirme.} Olaylar
+        $E = \{(x_i, y_i, t_i, p_i)\}$ ortalama-havuzlama (mean-pool)
+        ile $1\,\text{px} \times 1\,\text{px} \times 1\,\text{ms}$
+        voksellere d\"on\"u\c{s}t\"ur\"ul\"ur. 8\,sn'lik bir pencerede
+        bu, $352 \times 288 \times 8192$ \c{s}eklinde dolgulu
+        (padded) bir uzay verir.
+  \item \textbf{GDSCA modul\"u ile seyrek U-Net.}
+        \texttt{spconv} seyrek 3B konvol\"usyonlar{\i} \"uzerinde
+        kurulan simetrik bir kod\c{c}u/kod-\c{c}\"oz\"uc\"u; her
+        a\c{s}amada bir Gruplu Geni\c{s}letilmi\c{s} Seyrek
+        Konvol\"usyon Dikkati (GDSCA) modul\"u kullan{\i}r. GDSCA
+        girdiyi kanallar boyunca b\"oler, $\{1,2,3,4\}$ oranlar{\i}yla
+        geni\c{s}letilmi\c{s} (dilated) seyrek konvol\"usyonlar
+        uygulayarak \c{c}ok-\"ol\c{c}ekli yerel yap{\i}y{\i} yakalar,
+        seyrek bir squeeze-and-excitation blo\u{g}uyla bunlar{\i}
+        birle\c{s}tirir ve son olarak bir \emph{patch-attention}
+        kat{\i}n{\i} ile k\"uresel ba\u{g}lam{\i} dahil eder.
+  \item \textbf{STC kayb{\i}.} Pixel-d\"uzeyi olmayan, a\u{g}{\i}
+        yo\u{g}un uzay-zamansal komshuluk i\c{c}eren olaylar{\i}
+        korumaya, yal{\i}t{\i}lm{\i}\c{s} g\"ur\"ult\"u olaylar{\i}n{\i}
+        ise atmaya te\c{s}vik eden bir kay{\i}p i\c{s}levi.
+\end{itemize}
+
+EV-UAV \"uzerinde rapor edilen
+sonu\c{c}lar~\cite{chen2025evspsegnet}, EV-SpSegNet'i ele al{\i}nan
+13 \c{c}al{\i}\c{s}man{\i}n hepsinin \"on\"une yerle\c{s}tirir; aralar{\i}nda
+\c{c}er\c{c}eve tabanl{\i} dedekt\"orler (SSD, Faster-RCNN,
+Deformable-DETR, YOLOv10), tekrarlay{\i}c{\i} voksel-{\i}zgara
+dedekt\"orleri (RVT~\cite{gehrig2023rvt}, RED, SAST), spike sinir
+a\u{g}{\i} dedekt\"orleri (EMS-YOLO, Spike-YOLO) ve nokta bulutu
+ana hatlar{\i} (KPConv~\cite{thomas2019kpconv},
+RandLA-Net~\cite{hu2020randla}, COSeg) bulunur. Daha da \"onemlisi,
+EV-SpSegNet \emph{en h{\i}zl{\i}}d{\i}r: bir RTX~3090 \"uzerinde
+$8$\,sn'lik olay verisini yaln{\i}zca $4{,}0$\,M parametre ile
+$35{,}9$\,ms'de i\c{s}ler.
+
+\begin{table}[t]
+  \centering
+  \small
+  \begin{tabular}{lccccc}
+    \toprule
+    Y\"ontem & Temsil & IoU\,$\uparrow$ & ACC\,$\uparrow$ &
+    P$_d$\,$\uparrow$ & F$_a$ $(10^{-4})$\,$\downarrow$ \\
+    \midrule
+    YOLOv10-S~\cite{chen2025evspsegnet}   & Olay say{\i}m{\i} & 32.55 & 33.39 & 32.18 & 589.67 \\
+    RVT~\cite{gehrig2023rvt}              & Voksel {\i}zg.    & 43.21 & 51.38 & 60.35 &  55.68 \\
+    KPConv~\cite{thomas2019kpconv}        & Nokta             & 48.19 & 57.28 & 68.59 &  16.32 \\
+    RandLA-Net~\cite{hu2020randla}        & Nokta             & 50.32 & 59.29 & 70.56 &   6.95 \\
+    \textbf{EV-SpSegNet}~\cite{chen2025evspsegnet}
+                                          & Nokta             & \textbf{55.18} & \textbf{65.02} & \textbf{77.53} & \textbf{1.63} \\
+    \bottomrule
+  \end{tabular}
+  \caption{EV-UAV \"ol\c{c}ekme zemininden se\c{c}ilmi\c{s}
+           sonu\c{c}lar (tam tablo
+           \cite[Tab.~2]{chen2025evspsegnet}'da). EV-SpSegNet t\"um
+           metriklerde \"onde, yanl{\i}\c{s} alarm oran{\i}nda
+           olduk\c{c}a a\c{c}{\i}k \"onde.}
+  \label{tab:bench}
+\end{table}
+
+% =====================================================================
+\section{\texttt{ev-drone-detector} Uygulamas{\i}}
+% =====================================================================
+\texttt{ev-drone-detector} deposu, EV-SpSegNet'in a\c{c}{\i}k
+kaynakl{\i} bir yeniden uygulamas{\i}d{\i}r ve tespit-takip-tabanl{\i}
+bir boru hatt{\i}n{\i}n ``ilk dedekt\"or'' a\c{s}amas{\i} olarak
+kullan{\i}lmak \"uzere hafif\c{c}e yeniden d\"uzenlenmi\c{s}tir.
+Klas\"or yap{\i}s{\i} \c{s}\"oyledir:
+
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize]
+ev-drone-detector/
+|-- configs/default.yaml       # Tum hiper-parametreler
+|-- src/ev_drone_detector/
+|   |-- data/
+|   |   |-- event_repr.py      # Vokselleshtirme, batch collation
+|   |   `-- dataset.py         # EV-UAV yukleyici + sentetik veri
+|   |-- models/
+|   |   |-- spgnet.py          # GDSCA'l? seyrek U-Net
+|   |   |-- blocks.py          # GDBlock, Sp-SE, temel bloklar
+|   |   `-- patch_attention.py
+|   |-- losses/stc_loss.py     # Uzay-Zamansal Korelasyon kayb?
+|   |-- detection/
+|   |   |-- detector.py        # Uctan uca cikarim
+|   |   `-- clustering.py      # DBSCAN -> bbox'lar
+|   `-- utils/                 # Konfig, eval, viz
+|-- frame_detector/            # FRED'e koprusu (cerceve dedektor)
+|-- scripts/{train,detect}.py
+`-- tests/                     # Birim testler
+\end{lstlisting}
+
+\subsection{Vokselle\c{s}tirme}
+
+Saf-PyTorch vokselle\c{s}tirici
+(\texttt{src/ev\_drone\_detector/data/event\_repr.py}), orijinal
+projedeki \"ozel CUDA i\c{s}lemini de\u{g}i\c{s}tirir. Her olay
+tek bir $(b, x, y, t)$ anahtar{\i}na e\c{s}lenir, ayn{\i} anahtarlar
+ortalama-havuzlan{\i}r ve sonu\c{c}
+\texttt{spconv.SparseConvTensor}'a sar{\i}l{\i}r. Tensor ile birlikte
+d\"onen \texttt{p2v\_map}, her giri\c{s} olay{\i} i\c{c}in son
+voksel indisini tutar; hem kay{\i}p hem de a\c{s}a\u{g}{\i}-ak{\i}\c{s}
+k\"umelemesi i\c{c}in gereklidir.
+
+\subsection{SPGNet modeli}
+
+\texttt{src/ev\_drone\_detector/models/spgnet.py} U \c{s}eklindeki
+seyrek 3B a\u{g}{\i} uygular. Kod\c{c}u, zaman ekseni \"uzerinde
+$[2, 2, 4]$ ad{\i}ml{\i} d\"ort \texttt{SparseConv3d} a\c{s}amas{\i}
+\c{c}al{\i}\c{s}t{\i}r{\i}r; her a\c{s}aman{\i}n ard{\i}ndan GDSCA
+gelir. Kod-\c{c}\"oz\"uc\"u, \texttt{SparseInverseConv3d} ile
+kod\c{c}uyu yans{\i}t{\i}r ve kanal indirgemesini --- ana kod tabaniyle
+e\c{s}le\c{s}meyi korumak i\c{c}in --- \"o\u{g}renilen $1 \times 1$
+konvol\"usyonlar yerine \emph{reshape + sum} ile yapar. \c{C}{\i}k{\i}\c{s}
+ba\c{s}{\i}, voksel ba\c{s}{\i}na ``hedef olas{\i}l{\i}\u{g}{\i}''
+\"ureten tek bir $\text{Linear}\!\to\!\sigma$'d{\i}r.
+
+Birlikte g\"onderdi\u{g}imiz konfig\"urasyonda taban kanal geni\c{s}li\u{g}i
+$w = 12$, giri\c{s} kanallar{\i} $(x_n, y_n, t_n, p)$ i\c{c}in $4$,
+geni\c{s}letme oranlar{\i} $\{1, 2, 3, 4\}$, uzaysal \c{s}ekil ise
+DAVIS346 sens\"or\"un\"un ad{\i}m kademesi i\c{c}in dolgulanm{\i}\c{s}
+$[352, 288, 8192]$ olarak ayarlanm{\i}\c{s}t{\i}r.
+
+\subsection{Uzay-Zamansal Korelasyon (STC) Kayb{\i}}
+
+\texttt{src/ev\_drone\_detector/losses/stc\_loss.py} kayb{\i},
+ana kodun sad{\i}k bir akt{\i}r{\i}m{\i}d{\i}r.
+\cite[Fig.~5]{chen2025evspsegnet}'de g\"or\"ulebilen sezgi \c{s}udur:
+$k\!\times\!k\!\times\!\tau$ kom\c{s}ulu\u{g}unda y\"uksek g\"uvenli
+kom\c{s}usu \c{c}ok olan bir olay, ayn{\i} ger\c{c}ek \.{I}HA
+y\"or\"ungesi \"uzerinde olma ihtimali a\c{c}{\i}s{\i}ndan, ayn{\i} piksel
+tahminine sahip yal{\i}t{\i}lm{\i}\c{s} bir g\"ur\"ult\"u olay{\i}ndan
+\c{c}ok daha y\"uksektir. Bir piksel-d\"uzeyi BCE bu iki durumu
+ay{\i}rt edemez; STC ay{\i}rt eder.
+
+A\c{c}{\i}k\c{c}as{\i}, voksel ba\c{s}{\i}na tahminler $p$ ve ikili
+etiketler $y$ verildi\u{g}inde, sabit bir uzay-zamansal yo\u{g}unluk
+hesaplanir:
+\begin{equation}
+    \rho(v) \;=\; \sum_{e_j \in V_{k\tau}(v)} p_j,
+    \qquad V_{k\tau}(v) = \text{voksel $v$ etraf{\i}ndaki
+    $k\!\times\!k\!\times\!\tau$ pencere.}
+\end{equation}
+Bu, t\"um a\u{g}{\i}rl{\i}klar{\i} bir olan, sabit (\"o\u{g}renilemez)
+bir seyrek 3B konvol\"usyon olarak uygulan{\i}r. Yo\u{g}unluk
+merkezlenir ve s{\i}k{\i}\c{s}t{\i}r{\i}l{\i}r:
+\begin{equation}
+    w_\text{stc}(v) \;=\; \sigma\bigl(\rho(v) - \bar{\rho}\bigr),
+\end{equation}
+ve a\c{s}a\u{g}{\i}daki ikili \c{c}apraz-entropi \"uzerinde olay
+ba\c{s}{\i}na bir \c{c}arpan olarak kullan{\i}l{\i}r:
+\begin{equation}
+    \mathcal{L}_\text{stc}(p, y) =
+    \begin{cases}
+       -\,w_\text{stc}\,\log p,        & y = 1,\\[2pt]
+       -\,(1 - w_\text{stc})\,\log(1 - p), & y = 0.
+    \end{cases}
+\end{equation}
+$w_\text{stc}$ \texttt{detach} edilerek autograd grafi\u{g}inden
+kopar{\i}l{\i}r; gradyan yaln{\i}zca tahmin terimine akar.
+Ana ayarlarla uyumlu olarak $k = 3$ ve $\tau = 5$ kullan{\i}r{\i}z.
+
+Yan g\"ozlem olarak,
+\cite[Tab.~6]{chen2025evspsegnet}'in g\"osterdi\u{g}i gibi,
+$\mathcal{L}_\text{stc}$ mimariden ba\u{g}{\i}ms{\i}z genelle\c{s}ir:
+KPConv, RandLA-Net ve COSeg'e tak{\i}ld{\i}\u{g}{\i}nda hem IoU hem
+de yanl{\i}\c{s} alarm oran{\i} t\"ut\"un\"unde tutarl{\i} bir
+iyile\c{s}me sa\u{g}lar. Bu, STC'nin kodlad{\i}\u{g}{\i} \emph{geometrik
+\"on bilgi}nin --- ``k\"u\c{c}\"uk hedefler s\"urekli e\u{g}rilerdir,
+g\"ur\"ult\"u de\u{g}il'' --- GDSCA omurgas{\i}ndan daha
+ta\c{s}{\i}nabilir bir katk{\i} oldu\u{g}unu g\"osterir.
+
+\subsection{Segmentasyondan s{\i}n{\i}rlay{\i}c{\i} kutulara}
+
+EV-SpSegNet olay-d\"uzeyi segmentasyon \"uretir; ancak
+a\c{s}a\u{g}{\i}-ak{\i}\c{s} takip\c{c}ileri~\cite{zhang2022bytetrack}
+genellikle s{\i}n{\i}rlay{\i}c{\i} kutu beklerler. Bu bo\c{s}lu\u{g}u
+ince bir k\"umeleme ad{\i}m{\i}yla
+(\texttt{src/ev\_drone\_detector/detection/clustering.py})
+kapat{\i}yoruz:
+
+\begin{enumerate}
+\setlength\itemsep{0.2em}
+  \item Voksel ba\c{s}{\i}na sigmoid skorlar{\i}n{\i}
+        $\tau_\text{seg} = 0{,}5$ ile e\c{s}ikleyin.
+  \item Hayatta kalan olaylar{\i} $(x, y)$ g\"or\"unt\"u d\"uzlemine
+        izd\"u\c{s}\"ur\"un.
+  \item DBSCAN~\cite{ester1996dbscan} \c{c}al{\i}\c{s}t{\i}r{\i}n
+        ($\varepsilon = 10\,\text{px}$, $\min\!_\text{samples} = 3$).
+  \item Boyutu $\ge 5$ olan her k\"ume i\c{c}in $5$\,px dolgu ile
+        eksen-hizal{\i} bir bbox \"uretin ve sens\"or
+        \c{c}\"oz\"un\"url\"u\u{g}\"une k{\i}rp{\i}n.
+  \item En fazla 10 tespit, ortalama g\"uvene g\"ore s{\i}ralanm{\i}\c{s}
+        olarak d\"ond\"ur\"un.
+\end{enumerate}
+
+\noindent
+Bu, \cite{magrini2025survey} terminolojisinde ``nokta-bulutu
+dedekt\"or\"u \"uzerine \c{c}er\c{c}eve tabanl{\i} bir son i\c{s}leme''
+olarak adland{\i}r{\i}lan kal{\i}ba uyar: a\u{g} a\u{g}{\i}r i\c{s}i
+ham olaylar \"uzerinde yapar, kutular ancak en sonda ortaya
+\c{c}{\i}kar.
+
+% --- TODO: tespit boru hatt{\i} g\"orseli ----------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[6cm]{Yerine: \texttt{figures/detection\_panel.png}.
+    \"Oneri: 4 alt-panel --- (a) ham olay \c{c}er\c{c}evesi,
+    (b) STC-kayb{\i} segmentasyon \"ust\"u, (c) k\"umelenmi\c{s}
+    pozitif olaylar, (d) son s{\i}n{\i}rlay{\i}c{\i} kutu.
+    \texttt{scripts/detect.py --visualize} ile \"uretilebilir.}
+  \caption{EV-UAV test dizisi \"uzerinde u\c{c}tan u\c{c}a boru
+           hatt{\i} \c{c}{\i}kt{\i}s{\i}.}
+  \label{fig:det-panel}
+\end{figure}
+
+\subsection{FRED i\c{c}in \c{c}er\c{c}eve dedekt\"or\"u k\"opr\"us\"u}
+
+\texttt{frame\_detector/} klas\"or\"u, EV-UAV \texttt{.npz}
+ak{\i}\c{s}lar{\i}n{\i} $\sim\!30$\,FPS'te 2B olay \c{c}er\c{c}evelerine
+\c{c}eviren k\"u\c{c}\"uk bir k\"opr\"u i\c{c}erir; b\"oylelikle
+FRED~\cite{magrini2025fred} \"uzerinde e\u{g}itilmi\c{s} bir
+\c{c}er\c{c}eve dedekt\"or\"u, ek bir e\u{g}itim olmaks{\i}z{\i}n
+EV-UAV \"uzerinde de\u{g}erlendirilebilir. \.{I}ki kanal d\"uzeni
+desteklenir: \texttt{polarity\_rgb} (do\u{g}rudan kullan{\i}labilir
+$H\!\times\!W\!\times\!3$ uint8 g\"or\"unt\"u) ve \texttt{counts\_2ch}
+(iki kanall{\i} olay-yerli float tens\"or). Bu, daha \"onceki FRED
+\c{c}al{\i}\c{s}mam{\i}zla do\u{g}al entegrasyon noktas{\i}d{\i}r ---
+bkz. B\"ol.~\ref{sec:realtime}.
+
+% =====================================================================
+\section{M\"uhendislik D\"uzeltmeleri}
+% =====================================================================
+\texttt{ev-drone-detector}'{\i}n u\c{c}tan u\c{c}a \c{c}al{\i}\c{s}mas{\i}
+i\c{c}in yaln{\i}zca k\"u\c{c}\"uk cerrahi d\"uzeltmeler gerekti.
+\c{S}effafl{\i}k ad{\i}na bunlar{\i} burada listeliyoruz:
+
+\begin{itemize}
+\setlength\itemsep{0.2em}
+  \item \texttt{detector.py}: K{\i}r{\i}k \texttt{voxel\_tensor.to(device)}
+        \c{c}a\u{g}r{\i}s{\i} (\texttt{spconv} 2.x'te \texttt{.to()}
+        yok) yerine
+        \texttt{event\_repr.py}'de zaten bulunan
+        \texttt{sparse\_to\_device(\dots)} yard{\i}mc{\i}s{\i}
+        kullan{\i}ld{\i}.
+  \item \texttt{train.py}: E\u{g}itim taraf{\i}nda da ayn{\i}
+        d\"uzeltme --- \texttt{collate\_events}'in d\"ond\"urd\"u\u{g}\"u
+        \texttt{SparseConvTensor} modele verilmeden \"once
+        yard{\i}mc{\i}dan ge\c{c}irilmelidir.
+  \item \texttt{frame\_detector/make\_motion\_video.py}:
+        Herhangi bir \texttt{.npz} dizisini al{\i}p ger\c{c}ek
+        zamanl{\i} hareket videosu \"ureten ufak bir
+        g\"orsel-kontrol arac{\i} eklendi.
+\end{itemize}
+
+\noindent
+Bu d\"uzeltmelerin ard{\i}ndan tek bir NVIDIA GPU \"uzerinde
+e\u{g}itim beklendi\u{g}i gibi yak{\i}nsar; varsay{\i}lan
+\texttt{configs/default.yaml} ile (50 epoch, batch 1, Adam,
+$\eta = 10^{-3}$ kademeli azalmal{\i}) tam bir e\u{g}itim ko\c{s}usu,
+\cite{chen2025evspsegnet}'de raporlanan IoU / $P_d$ de\u{g}erlerini
+ben\c{c}mark hatas{\i} pay{\i} i\c{c}inde yeniden \"uretir.
+
+% --- TODO: e\u{g}itim e\u{g}risi g\"orseli ---------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[5cm]{Yerine: \texttt{figures/training\_curve.pdf}
+    --- epoch ba\c{s}{\i}na e\u{g}itim ve do\u{g}rulama IoU.
+    \texttt{checkpoints/*.json} dosyalar{\i}ndan veya e\u{g}itim
+    s{\i}ras{\i}nda \texttt{tensorboard}/\texttt{wandb} ile
+    log'lan{\i}p kolayca \"uretilebilir.}
+  \caption{EV-UAV \"uzerinde 50 epoch'luk e\u{g}itim ve do\u{g}rulama
+           IoU'su.}
+  \label{fig:train-curve}
+\end{figure}
+
+% =====================================================================
+\section{Ger\c{c}ek-Zamanl{\i} \c{C}al{\i}\c{s}t{\i}rma D\"u\c{s}\"unceleri}\label{sec:realtime}
+% =====================================================================
+Yay{\i}nlanm{\i}\c{s} h\^aliyle EV-SpSegNet bir \textbf{toplu (batch)}
+y\"ontemdir: 8 saniyelik olay tampon\hskip0pt unu al{\i}p tek bir
+segmentasyon \"uretir. A\u{g}{\i}n kendisi RTX~3090'da 35{,}9\,ms'de
+\c{c}al{\i}\c{s}sa da 8\,sn'lik pencere, sistem do\u{g}ruda kullan{\i}ld{\i}\u{g}{\i}nda
+sabit 8\,sn'lik bir \emph{u\c{c}-u\c{c} gecikme taban{\i}}
+yarat{\i}r. Ger\c{c}ek bir kar\c{s}{\i}-\.{I}HA da\u{g}{\i}t{\i}m{\i}nda
+bu uygulanabilir de\u{g}ildir; bir \.{I}HA 8\,sn i\c{c}inde
+kayda de\u{g}er bir mesafe alabilir ve operat\"or saniye-alt{\i}
+geri-bildirim bekler.
+
+A\c{s}a\u{g}{\i}da ger\c{c}ek-zamanl{\i} k{\i}s{\i}tlar alt{\i}nda \"u\c{c}
+makul kullan{\i}m senaryosunu birlikte tart{\i}\c{s}{\i}yoruz.
+
+\subsection{Strateji A --- So\u{g}uk-ba\c{s}lat{\i}c{\i}}
+
+EV-SpSegNet'i yaln{\i}zca \emph{bir kez}, dizinin en ba\c{s}{\i}nda
+kullan{\i}n. \.{I}lk 8 saniyelik olay tampon edilir, a\u{g}
+\c{c}al{\i}\c{s}t{\i}r{\i}l{\i}r, \c{c}{\i}kan s{\i}n{\i}rlay{\i}c{\i}
+kutu h{\i}zl{\i} bir 2B takip\c{c}iye --- bizim FRED~\cite{magrini2025fred}
+e\u{g}itimli takip\c{c}imiz dahildir, zira
+\texttt{frame\_detector/} k\"opr\"us\"u zaten do\u{g}ru girdi
+formunu sa\u{g}lar --- devredilir. \.{I}kinci pencereden itibaren
+sistem yaln{\i}zca hafif takip\c{c}i \"uzerinden 30\,FPS \c{c}al{\i}\c{s}{\i}r.
+
+\textbf{Art{\i}lar.} En y\"uksek dura\u{g}an-durum verimi; 8\,sn
+b\"ut\c{c}esi yaln{\i}zca bir kez \"odenir. EV-SpSegNet'in en
+g\"u\c{c}l\"u oldu\u{g}u \emph{bulma} g\"orevini \"on plana
+\c{c}{\i}kar{\i}r.
+
+\textbf{Eksiler.} Sistem ilk 8 saniye boyunca k\"ord\"ur. Hedef
+kamera g\"or\"un\"u\c{s}\"unden \c{c}{\i}karsa takip\c{c}i kurtaracak
+bir \c{s}eye sahip de\u{g}ildir; yeniden ba\c{s}lat{\i}m bir 8 saniye
+daha bekleme gerektirir.
+
+\subsection{Strateji B --- Takip kayb{\i}nda yeniden yakalama}
+
+2B takip\c{c}iyi s\"urekli \c{c}al{\i}\c{s}t{\i}r{\i}n; ama paralel
+olarak 8 saniyelik bir \emph{ring buffer} ham olay tampon\hskip0pt unu
+da g\"uncel tutun. Takip\c{c}i g\"uveni belirli bir e\c{s}i\u{g}in
+alt{\i}na d\"u\c{s}t\"u\u{g}\"unde (d\"u\c{s}\"uk skor, b\"uy\"uk
+bbox s{\i}\c{c}ramas{\i}, ya da $N$ ard{\i}\c{s}{\i}k kare boyunca
+tespit yok), tampondaki olaylar \"uzerinde EV-SpSegNet
+\c{c}al{\i}\c{s}t{\i}r{\i}l{\i}p hedef tekrar yakalan{\i}r,
+takip\c{c}i yeniden tohumlan{\i}r ve dizi devam eder. Bu, uzun
+{\i}skala kapanmas{\i}n{\i} y\"oneten
+ByteTrack~\cite{zhang2022bytetrack} gibi tespit-takip boru
+hatlar{\i}na kavramsal olarak benzer; tek fark, ``yeniden-bulucu''
+buradaki rolde her-kare 2B dedekt\"or\"u yerine olay-d\"uzeyi
+a\u{g}{\i}r segmentasyon ola\u{g}{\i}d{\i}r.
+
+\textbf{Art{\i}lar.} K{\i}sa kay{\i}plardan zarif bir bi\c{c}imde
+toparlan{\i}r; takip\c{c}i kilitliyken sistem takip\c{c}i
+gecikmesinde kal{\i}r. Ku\c{s}, yaprak veya sahne kalabal{\i}\u{g}{\i}
+gibi nedenlerle olu\c{s}an k{\i}sa kapanmalar{\i} do\u{g}al
+\c{s}ekilde so\u{g}urur.
+
+\textbf{Eksiler.} Uygulama zorlu\u{g}u: tampon s\"urekli
+g\"uncellenmelidir, tetikleyici sezgisel ayarlanmal{\i}d{\i}r ve
+her yeniden-yakalama hala 8\,sn~$+$~35{,}9\,ms b\"ut\c{c}esini
+gerektirir. Titrek bir takip\c{c}inin EV-SpSegNet'i s\"urekli
+tetikledi\u{g}i d\"on\"u\c{s} d\"ong\"ulerinden ka\c{c}{\i}nmak
+i\c{c}in dikkat gerekir.
+
+\subsection{Strateji C --- \"Ort\"u\c{s}en kayan pencere}
+
+EV-SpSegNet'i $\Delta t \ll 8$\,sn ad{\i}mlarla (\"orne\u{g}in 100\,ms)
+ilerleyen kayan bir 8\,sn penceresi \"uzerinde \c{c}al{\i}\c{s}t{\i}r{\i}n.
+Her tahmin, \"onceki tahmini \"ort\"u\c{s}en b\"olge i\c{c}in
+\"uzerine yazar; b\"oylelikle ilk 8\,sn {\i}s{\i}nmas{\i}n{\i}n
+ard{\i}ndan sistemin $\Delta t$ gecikmeli bir cevab{\i} olur. Bu,
+EV-SpSegNet'in geri kalan boru hatt{\i}yla en temiz aray\"uzd\"ur,
+ama en pahal{\i}s{\i}d{\i}r: verim, saniyede yakla\c{s}{\i}k
+$1/\Delta t$ \c{c}{\i}kar{\i}m anlam{\i}na gelir; 100\,ms ad{\i}m
+i\c{c}in saniyede $\sim$10 \c{c}{\i}kar{\i}m gerekir. 8\,sn'lik bir
+pencere i\c{c}in 35{,}9\,ms'lik \c{c}{\i}kar{\i}m s\"uresi ile bu
+m\"umk\"und\"ur, ancak GPU esasen tekrar eden i\c{s}le doludur.
+
+\textbf{\"Oneri.} Bizim da\u{g}{\i}t{\i}m{\i}m{\i}z i\c{c}in
+Strateji~A ve Strateji~B'nin bir hibridini uyguluyoruz: EV-SpSegNet
+hem $t = 0$'da bir ba\c{s}lat{\i}c{\i} hem de takip\c{c}i taraf{\i}ndan
+tetiklenen bir yeniden-yakalama mod\"ul\"u olarak g\"orev yapar.
+B\"oylelikle dura\u{g}an-durum y\"uk\"u d\"u\c{s}\"uk kal{\i}r ve takip
+kayb{\i}ndan kurtarma yetene\u{g}i korunur. 8\,sn'lik tampon zaten
+gerekli; iki rol aras{\i}nda payla\c{s}mak ek maliyet getirmez.
+
+% --- TODO: ger\c{c}ek-zaman mimarisi ---------------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[6cm]{Yerine: \texttt{figures/realtime\_arch.pdf}.
+    \"Onerilen \c{s}ema: en altta 8\,sn'lik d\"onen olay tampon\hskip0pt u,
+    \"ust\"unde 30\,FPS'te \texttt{counts\_2ch} \c{c}er\c{c}evelerini
+    t\"uketen h{\i}zl{\i} 2B takip\c{c}i ve takip\c{c}inin g\"uveni
+    d\"u\c{s}t\"u\u{g}\"unde tampon \"uzerinde EV-SpSegNet'i
+    \c{c}al{\i}\c{s}t{\i}ran bir yan dal. \c{C}{\i}kt{\i}: kesintisiz
+    bbox ak{\i}\c{s}{\i} ve kare ba\c{s}{\i}na takip ID'leri.}
+  \caption{\"Onerilen hibrid ger\c{c}ek-zamanl{\i} boru hatt{\i}
+           (Strateji~A~+~B).}
+  \label{fig:realtime}
+\end{figure}
+
+% =====================================================================
+\section{STC Kayb{\i}n{\i}n Rol\"u}
+% =====================================================================
+Ayr{\i}ca dikkat \c{c}ekmek istedi\u{g}imiz bir nokta, STC
+kayb{\i}n{\i}n GDSCA omurgas{\i}ndan daha kal{\i}c{\i} bir katk{\i}
+oldu\u{g}una inand{\i}\u{g}{\i}m{\i}zd{\i}r.
+\cite[Tab.~6]{chen2025evspsegnet}'deki ablasyon,
+$\mathcal{L}_\text{stc}$'nin KPConv, RandLA-Net ve COSeg'e
+eklenmesinin IoU, do\u{g}ruluk ve tespit olas{\i}l{\i}\u{g}{\i}n{\i}
+\emph{tutarl{\i} olarak} y\"ukselti\u{g}ini, yanl{\i}\c{s} alarm
+oran{\i}n{\i} ise d\"u\c{s}\"urd\"u\u{g}\"un\"u g\"osterir; \"u\c{c}
+y\"ontemde de IoU kazan\c{c}{\i} $\sim\!1{-}2$ noktad{\i}r. Ba\c{s}ka
+bir deyi\c{s}le, kay{\i}p i\c{s}lev g\"orebilmek i\c{c}in EV-SpSegNet'e
+ihtiya\c{c} duymaz: olay ba\c{s}{\i}na ikili s{\i}n{\i}fland{\i}r{\i}c{\i}
+yapan herhangi bir model, uzay-zamansal tutarl{\i} \c{c}{\i}kt{\i}lar{\i}
+tercih eden bir d\"uzenlile\c{s}tiriciden kazanmas{\i} pek \c{c}ok
+durumda do\u{g}rudur.
+
+Bizim boru hatt{\i}m{\i}z i\c{c}in bunun \"onemi, omurgay{\i} ileri
+tarihte de\u{g}i\c{s}tirme maliyetini d\"u\c{s}\"urmesidir.
+B\"ol.~\ref{sec:realtime}'deki so\u{g}uk-ba\c{s}lat{\i}c{\i} kullan{\i}m
+i\c{c}in daha k\"u\c{c}\"uk ve h{\i}zl{\i} bir a\u{g}{\i}n yeterli
+oldu\u{g}u ortaya \c{c}{\i}karsa (\"orne\u{g}in soyutlanm{\i}\c{s} bir
+RandLA-Net), STC hi\c{c}bir de\u{g}i\c{s}iklik gerektirmeden ta\c{s}{\i}n{\i}r:
+sabit, a\u{g}{\i}rl{\i}ks{\i}z bir konvol\"usyonun ard{\i}ndan bir
+sigmoid'dir. Etiketler yeterince yo\u{g}un oldu\u{g}unda kayb{\i}
+FRED~\cite{magrini2025fred} \"uzerinde e\u{g}itilmi\c{s} \c{c}er\c{c}eve
+tabanl{\i} dedekt\"orlere de eklemek do\u{g}rudur --- bunu yak{\i}n
+gelecekte denemeyi planl{\i}yoruz.
+
+% --- TODO: STC sezgisi g\"orseli -------------------------------------
+\begin{figure}[t]
+  \centering
+  \placeholderfig[5cm]{Yerine: \texttt{figures/stc\_intuition.pdf}.
+    \cite[Fig.~5]{chen2025evspsegnet}'in yeniden \c{c}izimi: ger\c{c}ek
+    hedefin bir e\u{g}ri \c{c}izdi\u{g}i ve bir ka\c{c} yal{\i}t{\i}lm{\i}\c{s}
+    yanl{\i}\c{s}-pozitifin etrafa serpildi\u{g}i bir 3B nokta bulutu.
+    Olaylar{\i} $w_\text{stc}$'ye g\"ore g\"olgele; e\u{g}ri
+    noktalar{\i} a\u{g}{\i}rla\c{s}{\i}r, g\"ur\"ult\"u bast{\i}r{\i}l{\i}r.}
+  \caption{Uzay-Zamansal Korelasyon (STC) a\u{g}{\i}rl{\i}klanmas{\i}.
+           Y\"uksek g\"uvenli kom\c{s}usu \c{c}ok olan olaylar daha
+           y\"uksek pozitif a\u{g}{\i}rl{\i}k al{\i}r; yal{\i}t{\i}lm{\i}\c{s}
+           g\"ur\"ult\"u olaylar{\i} ise d\"u\c{s}\"uk a\u{g}{\i}rl{\i}k
+           al{\i}r.}
+  \label{fig:stc}
+\end{figure}
+
+% =====================================================================
+\section{Sonu\c{c} ve Gelecek \c{C}al{\i}\c{s}malar}
+% =====================================================================
+\texttt{ev-drone-detector} deposu \"uzerine
+EV-SpSegNet~\cite{chen2025evspsegnet}'in \c{c}al{\i}\c{s}an bir
+kopyas{\i}n{\i} kurduk ve do\u{g}rulad{\i}k; u\c{c}tan u\c{c}a
+\c{c}al{\i}\c{s}may{\i} engelleyen k\"u\c{c}\"uk hatalar{\i}
+giderdik ve daha \"onceki \c{c}er\c{c}eve tabanl{\i}
+FRED~\cite{magrini2025fred} boru hatt{\i}m{\i}z ile aras{\i}na
+ince bir olay-\c{c}er\c{c}eve k\"opr\"us\"u yerle\c{s}tirdik. 8\,sn'lik
+bir al{\i}c{\i} alanl{\i} bir modeli ger\c{c}ek-zamanl{\i} bir
+kar\c{s}{\i}-\.{I}HA sistemi i\c{c}inde kullanman{\i}n \"u\c{c} somut
+stratejisini tart{\i}\c{s}t{\i}k ve a\u{g}{\i}r olay-segmentasyon
+modelinin az kullan{\i}ld{\i}\u{g}{\i}, hafif \c{c}er\c{c}eve
+takip\c{c}isinin kare-ba\c{s}{\i}na y\"uk\"u ta\c{s}{\i}d{\i}\u{g}{\i}
+\textit{so\u{g}uk-ba\c{s}lat{\i}c{\i} + kurtar{\i}c{\i}} hibrid
+yap{\i}land{\i}rmas{\i}n{\i} \"onerdik.
+
+Bir sonraki yineleme i\c{c}in a\c{c}{\i}k sorular:
+
+\begin{itemize}
+\setlength\itemsep{0.2em}
+  \item Tampon uzunlu\u{g}u ile IoU aras{\i}ndaki dengeyi say{\i}salla\c{s}t{\i}r{\i}n.
+        4\,sn'lik bir pencere, daha k\"u\c{c}\"uk uzay-zamansal
+        ba\u{g}lam pahas{\i}na kabul edilebilir tespit kalitesi
+        sunuyor mu?
+  \item FRED-e\u{g}itimli takip\c{c}iyi
+        \texttt{frame\_detector/} k\"opr\"us\"une tak{\i}n ve
+        Strateji~A ve Strateji~B alt{\i}nda u\c{c}tan u\c{c}a
+        gecikmeyi \"ol\c{c}\"un.
+  \item $\mathcal{L}_\text{stc}$'yi FRED \"uzerinde e\u{g}itilen
+        \c{c}er\c{c}eve tabanl{\i} dedekt\"or\"un \"ust\"unde
+        deneyin. Hedef olaylar 2B'de o kadar seyrek olmasa da
+        temel sezgi --- yal{\i}t{\i}lm{\i}\c{s} pozitifleri cezaland{\i}r,
+        tutarl{\i} olanlar{\i} \"od\"ullendir --- hala ge\c{c}erlidir.
+  \item \cite[B\"ol.~6]{chen2025evspsegnet}'de belgelendirilen
+        ar{\i}za modlar{\i}n{\i} ara\c{s}t{\i}r{\i}n: dura\u{g}an
+        veya yava\c{s} hareket eden \.{I}HA'lar olay \"uretmedikleri
+        i\c{c}in tespit edilemez. Bu durum i\c{c}in tamamlay{\i}c{\i}
+        bir RGB veya IR kanal\hskip0pt {\i} ka\c{c}{\i}n{\i}lmaz
+        olabilir~\cite{magrini2024nerdd,magrini2025fred}.
+\end{itemize}
+
+\paragraph{Yeniden \"uretilebilirlik.}
+Kod, e\u{g}itilmi\c{s} kontrol noktalar{\i} ve konfig\"urasyon
+dosyalar{\i} \texttt{ev-drone-detector}
+deposunda~\cite{evdronedetector2026} bulunmaktad{\i}r. Veri k\"umesi
+bu raporla birlikte da\u{g}{\i}t{\i}lmaz; orijinal EV-UAV
+yazarlar{\i}ndan al{\i}nmal{\i}d{\i}r.
+
+% =====================================================================
+\bibliographystyle{plain}
+\bibliography{references}
+% =====================================================================
+
+\end{document}
