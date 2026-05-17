@@ -1,0 +1,883 @@
+% =====================================================================
+%  Event-based Tiny Drone Detection -- Presentation
+%  Visual style adapted from the "Article 2" LoRA template:
+%    - cream background, dark slate text
+%    - large serif titles (with trailing period for section dividers)
+%    - dark rounded boxes for technical content / tables / formulas
+%
+%  Compile on Overleaf with: pdflatex -> pdflatex
+%  (no bibliography needed, citations are inlined)
+% =====================================================================
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{pifont}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins}
+
+% ---------------------------------------------------------------------
+% Colours (close match to the template)
+% ---------------------------------------------------------------------
+\definecolor{papercream}{HTML}{F0EEE6}
+\definecolor{slateink}{HTML}{1F2933}
+\definecolor{boxink}{HTML}{1B1D22}
+\definecolor{mutedgray}{HTML}{6B7280}
+\definecolor{accentred}{HTML}{B33A3A}
+\definecolor{accentgreen}{HTML}{4F7A4F}
+\definecolor{accentblue}{HTML}{2F4A6D}
+
+% ---------------------------------------------------------------------
+% Beamer base look
+% ---------------------------------------------------------------------
+\setbeamercolor{background canvas}{bg=papercream}
+\setbeamercolor{normal text}{fg=slateink}
+\setbeamercolor{frametitle}{fg=slateink}
+\setbeamercolor{title}{fg=slateink}
+\setbeamercolor{itemize item}{fg=slateink}
+\setbeamercolor{itemize subitem}{fg=mutedgray}
+
+\setbeamerfont{frametitle}{family=\sffamily,series=\bfseries,size=\Large}
+\setbeamerfont{title}{family=\rmfamily,series=\bfseries,size=\Huge}
+\setbeamerfont{itemize/enumerate body}{size=\normalsize}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\textbullet}
+\setbeamertemplate{itemize subitem}{\textendash}
+
+% Frame title with horizontal rule under it (like template)
+\setbeamertemplate{frametitle}{%
+  \vspace{0.6em}%
+  \hspace{0.5em}\insertframetitle\par%
+  \vspace{-0.3em}%
+  \hspace{0.5em}\rule{0.94\paperwidth}{0.4pt}\par%
+  \vspace{0.4em}%
+}
+
+% ---------------------------------------------------------------------
+% Re-usable boxes
+% ---------------------------------------------------------------------
+% Dark rounded highlight box (formulas, tables, key facts)
+\newtcolorbox{darkbox}[1][]{
+  enhanced,
+  colback=boxink,
+  colframe=boxink,
+  coltext=white,
+  arc=4mm,
+  boxrule=0pt,
+  left=10pt,right=10pt,top=8pt,bottom=8pt,
+  #1
+}
+
+% Light card box (for figures or quote-style content)
+\newtcolorbox{lightcard}[1][]{
+  enhanced,
+  colback=white,
+  colframe=white,
+  arc=4mm,
+  boxrule=0pt,
+  left=10pt,right=10pt,top=8pt,bottom=8pt,
+  #1
+}
+
+% Section divider frame (giant serif title with period)
+\newcommand{\dividerslide}[1]{%
+  \begin{frame}[plain]%
+    \vspace{2.6cm}%
+    \hspace{1.2cm}{\fontfamily{ptm}\selectfont\fontsize{56}{64}\selectfont #1}%
+  \end{frame}%
+}
+
+% Small citation tag (used like ~Gemini / ~ChatGPT in template)
+\newcommand{\srctag}[1]{{\footnotesize\itshape\color{mutedgray}\textasciitilde#1}}
+
+% ---------------------------------------------------------------------
+% Title metadata
+% ---------------------------------------------------------------------
+\title{Article!}
+\subtitle{Event-based Tiny Drone Detection}
+\author{Yi\u{g}it Kaya Ba\u{g}c\i \\ Fred \\ [Candidate 3]}
+\date{}
+
+% =====================================================================
+\begin{document}
+% =====================================================================
+
+% ---------------------------------------------------------------------
+% Slide 1 -- Title
+% ---------------------------------------------------------------------
+\begin{frame}[plain]
+  \vspace{0.6cm}
+  \hspace{0.6cm}%
+  \begin{minipage}{0.95\paperwidth}
+    {\fontfamily{ptm}\selectfont\fontsize{72}{80}\selectfont Article!}\\[-0.2em]
+    \rule{0.94\paperwidth}{0.4pt}\\[0.2em]
+    {\sffamily\bfseries\large EV\,--\,Tiny Drone Detection}\\[3.2cm]
+
+    {\large Yi\u{g}it Kaya Ba\u{g}c\i}\\[0.2em]
+    {\large Fred}\\[0.2em]
+    {\large [Candidate 3]}\\[0.2em]
+    {\large TA \,--\, [Advisor]}
+  \end{minipage}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 2 -- The papers
+% ---------------------------------------------------------------------
+\begin{frame}[plain]
+  \vspace{1.2cm}
+  \centering
+  \begin{lightcard}[width=0.78\paperwidth]
+    {\fontfamily{ptm}\selectfont\Large\scshape Event-based Tiny Object Detection:\\[0.2em]
+     A Benchmark Dataset and Baseline\par}
+    \vspace{0.6em}
+    {\small\textbf{Nuo Chen, Chao Xiao, Yimian Dai, Shiman He, Miao Li, Wei An}}\\[0.2em]
+    {\small National University of Defense Technology}\\[0.4em]
+    {\ttfamily\small arXiv:2506.23575}\\
+    {\small (EV-SpSegNet + EV-UAV benchmark)}
+  \end{lightcard}
+
+  \vspace{0.6em}
+  \begin{lightcard}[width=0.78\paperwidth]
+    {\small Companion references:}\\[0.2em]
+    {\small \textbullet\ Magrini \textit{et~al.}, \textit{Drone Detection with Event Cameras} (survey), arXiv:2508.04564}\\
+    {\small \textbullet\ Magrini \textit{et~al.}, \textit{FRED: Florence RGB-Event Drone Dataset}, ACM MM 2025}
+  \end{lightcard}
+
+  \vspace{0.8em}
+  {\large\bfseries\sffamily 2025}
+\end{frame}
+
+% =====================================================================
+% Section 1 -- WHY EVENT CAMERAS?
+% =====================================================================
+
+% ---------------------------------------------------------------------
+% Slide 3 -- Big question
+% ---------------------------------------------------------------------
+\begin{frame}[plain]
+  \vspace{2.4cm}
+  \hspace{1.2cm}%
+  \begin{minipage}{0.85\paperwidth}
+    {\fontfamily{ptm}\selectfont\fontsize{40}{48}\selectfont
+      We want to detect tiny drones.\\[0.2em]
+      -- With an RGB camera?}
+  \end{minipage}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 4 -- Bigger question
+% ---------------------------------------------------------------------
+\begin{frame}[plain]
+  \vspace{2.4cm}
+  \hspace{1.2cm}%
+  \begin{minipage}{0.85\paperwidth}
+    {\fontfamily{ptm}\selectfont\fontsize{40}{48}\selectfont
+      Can we do it fast, even in\\
+      hard lighting and motion blur?}
+  \end{minipage}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 5 -- The problem with RGB (table, dark style)
+% ---------------------------------------------------------------------
+\begin{frame}{The Problem: Tiny, Fast, Hard to Light}
+  \vspace{0.4em}
+  \centering
+  \begin{darkbox}[width=0.92\paperwidth]
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabular}{p{0.32\linewidth}p{0.20\linewidth}p{0.20\linewidth}p{0.22\linewidth}}
+      \textbf{Challenge} & \textbf{RGB camera} & \textbf{Event camera} & \textbf{Why it matters}\\
+      \hline
+      Tiny in pixel space      & {\color{accentred}\ding{55}}~few px on target  & {\color{accentgreen}\ding{51}}~sub-pixel events fired & SNR collapses for RGB\\
+      Fast motion              & {\color{accentred}\ding{55}}~motion blur       & {\color{accentgreen}\ding{51}}~$\mu$s temporal res. & blur erases the drone\\
+      Bright sky / HDR         & {\color{accentred}\ding{55}}~overexposed       & {\color{accentgreen}\ding{51}}~$>$120\,dB dynamic range & sun, clouds, glare\\
+      Background clutter       & {\color{accentred}\ding{55}}~static + dynamic  & {\color{accentgreen}\ding{51}}~static is silent     & only motion is reported\\
+      Bandwidth                & {\color{accentred}\ding{55}}~dense frames       & {\color{accentgreen}\ding{51}}~sparse stream        & helpful for edge HW\\
+    \end{tabular}
+  \end{darkbox}
+  \vspace{0.4em}
+  \hfill\srctag{Magrini et~al.\ 2025 survey}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 6 -- BIG VISUAL: RGB vs Event (overexposed drum)
+% ---------------------------------------------------------------------
+\begin{frame}{RGB vs. Event -- The Same Drone}
+  \centering
+  \vspace{0.3em}
+  \begin{minipage}[t]{0.46\linewidth}
+    \centering
+    \begin{lightcard}[width=\linewidth]
+      \centering
+      % --- TODO: replace with figures/rgb_overexposed.png
+      \fbox{\parbox[c][4.6cm][c]{0.9\linewidth}{\centering\itshape\color{mutedgray}
+        Figure placeholder\\[0.3em]
+        \texttt{figures/rgb\_overexposed.png}\\[0.3em]
+        RGB frame from the EV-UAV / tiny-object\\
+        scene: overexposed drum, drone barely visible}}
+    \end{lightcard}
+    {\small\bfseries RGB \,--\, drone is lost in glare}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.46\linewidth}
+    \centering
+    \begin{lightcard}[width=\linewidth]
+      \centering
+      % --- TODO: replace with figures/event_curve.png
+      \fbox{\parbox[c][4.6cm][c]{0.9\linewidth}{\centering\itshape\color{mutedgray}
+        Figure placeholder\\[0.3em]
+        \texttt{figures/event\_curve.png}\\[0.3em]
+        Event point cloud of the same scene:\\
+        drone $=$ sharp continuous curve in $(x,y,t)$}}
+    \end{lightcard}
+    {\small\bfseries Events \,--\, drone draws a clean curve}
+  \end{minipage}
+
+  \vspace{0.4em}
+  {\small\itshape Same scene, same drone. Events suppress background\\and turn the target into a sparse 3D trajectory.}\\
+  \srctag{Chen et~al.\ 2025, EV-UAV}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 7 -- What an event camera actually does
+% ---------------------------------------------------------------------
+\begin{frame}{What is an Event Camera?}
+  \vspace{0.2em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.52\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.5em}
+      \item Bio-inspired sensor: each pixel fires \textbf{asynchronously}
+            when its log-intensity changes.
+      \item Output is a stream of events
+            $e_i = (x_i, y_i, t_i, p_i)$,
+            not frames.
+      \item \textbf{$\mu$s} temporal resolution, \textbf{$>$120\,dB} dynamic range,
+            \textbf{low latency}, \textbf{low power}.
+      \item Static background $\to$ no events.\\
+            Only \emph{change} is reported.
+    \end{itemize}
+
+    \column{0.46\linewidth}
+    \begin{darkbox}
+      \centering
+      \textbf{Why this fits tiny-drone detection}\\[0.4em]
+      A small, fast drone produces a\\
+      \emph{continuous curve} in the\\
+      $(x,y,t)$ event volume,\\
+      surrounded by silence.\\[0.4em]
+      \srctag{Gallego et~al.\ 2020}
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 8 -- The EV-UAV benchmark
+% ---------------------------------------------------------------------
+\begin{frame}{The EV-UAV Benchmark}
+  \vspace{0.2em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.5em}
+      \item First event-only dataset built specifically for \textbf{tiny drones}.
+      \item DAVIS346 sensor, $346\!\times\!260$, mounted on a tripod, $>$1\,year of recordings.
+      \item \textbf{147 sequences} (99 / 24 / 24 train/val/test).
+      \item \textbf{2.3\,M+} event-level annotations.
+      \item Target avg.\ size: $\mathbf{6.8 \times 5.4}$ px ($\sim$1/50 of earlier event UAV sets).
+    \end{itemize}
+
+    \column{0.48\linewidth}
+    \begin{darkbox}
+      \centering
+      \renewcommand{\arraystretch}{1.25}
+      \begin{tabular}{ll}
+        Resolution    & $346 \times 260$\\
+        Sensor        & DAVIS346\\
+        Labels        & per-event (not just bbox)\\
+        Sequences     & 147\\
+        Annotations   & $>2.3\,$M\\
+        Target size   & $6.8\!\times\!5.4$\,px\\
+      \end{tabular}
+    \end{darkbox}
+    \vspace{0.4em}
+    \hfill\srctag{Chen et~al.\ 2025}
+  \end{columns}
+\end{frame}
+
+% =====================================================================
+% Section 2 -- Three Solutions divider
+% =====================================================================
+\dividerslide{Three Solutions.}
+
+% ---------------------------------------------------------------------
+% Slide 10 -- Roadmap
+% ---------------------------------------------------------------------
+\begin{frame}{Three Approaches to the Same Problem}
+  \vspace{0.4em}
+  \begin{darkbox}[width=\linewidth]
+    \renewcommand{\arraystretch}{1.45}
+    \begin{tabular}{p{0.07\linewidth}p{0.27\linewidth}p{0.25\linewidth}p{0.32\linewidth}}
+      \textbf{\#} & \textbf{Author} & \textbf{Method} & \textbf{Idea}\\
+      \hline
+      1 & Yi\u{g}it Kaya Ba\u{g}c\i & EV-SpSegNet (sparse 3D U-Net) & segment the drone \textit{trajectory} in the event volume\\
+      2 & Fred & Real-time YOLO + tracking on event frames & accumulate events, detect per-frame, link IDs\\
+      3 & [Candidate 3] & [Template -- TBD] & [will be filled in once results land]\\
+    \end{tabular}
+  \end{darkbox}
+  \vspace{0.4em}
+  {\small Each candidate trades \textbf{accuracy}, \textbf{latency} and \textbf{hardware cost} differently.}
+\end{frame}
+
+% =====================================================================
+% CANDIDATE 1 -- EV-SpSegNet (Yi\u{g}it)
+% =====================================================================
+\dividerslide{Candidate 1 -- EV-SpSegNet.}
+
+% ---------------------------------------------------------------------
+% Slide 12 -- Key idea
+% ---------------------------------------------------------------------
+\begin{frame}{Key Idea: Segment Trajectories, Not Frames}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.55\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.5em}
+      \item Treat the event stream as a \textbf{3D point cloud} in $(x,y,t)$.
+      \item A tiny drone $=$ \textbf{elongated continuous curve}.\\
+            Background $=$ broad surfaces.\\
+            Noise $=$ isolated points.
+      \item Predict, per voxel, ``does this event belong to a drone?''
+      \item No 2D collapse, no loss of fine temporal cues.
+    \end{itemize}
+
+    \column{0.42\linewidth}
+    \begin{darkbox}
+      \centering
+      \textbf{Pipeline at a glance}\\[0.4em]
+      events
+      \;$\to$\; voxelise
+      \;$\to$\; \textbf{Sparse 3D U-Net}
+      \;$\to$\; per-voxel score
+      \;$\to$\; DBSCAN
+      \;$\to$\; bbox
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 13 -- Voxelisation
+% ---------------------------------------------------------------------
+\begin{frame}{Voxelisation}
+  \vspace{0.2em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.55\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.4em}
+      \item Events
+            $E = \{(x_i, y_i, t_i, p_i)\}$
+            $\to$ sparse $(W,H,T)$ grid.
+      \item Voxel size:
+            $\mathbf{1\,\text{px} \times 1\,\text{px} \times 1\,\text{ms}}$.
+      \item 8\,s window gives padded shape
+            $\mathbf{352 \times 288 \times 8192}$.
+      \item Pure-PyTorch voxeliser (replaces custom CUDA op).
+      \item Output wrapped into a \texttt{spconv.SparseConvTensor}.
+    \end{itemize}
+
+    \column{0.42\linewidth}
+    \begin{darkbox}
+      \centering
+      $E = \{(x_i, y_i, t_i, p_i)\}_{i=1}^{N}$\\[0.5em]
+      $\downarrow$\\[0.5em]
+      $\mathcal{V} \in \mathbb{R}^{W \times H \times T \times C}$\\
+      sparse\\[0.4em]
+      \srctag{event\_repr.py}
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 14 -- Architecture
+% ---------------------------------------------------------------------
+\begin{frame}{SPGNet -- Sparse 3D U-Net with GDSCA}
+  \vspace{0.2em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.54\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.4em}
+      \item Symmetric encoder / decoder on \texttt{spconv} sparse 3D convs.
+      \item Each stage uses a \textbf{GDSCA} module:
+        \begin{itemize}
+          \item channel split,
+          \item dilated sparse convs at rates $\{1,2,3,4\}$,
+          \item sparse squeeze-\&-excite fusion,
+          \item patch-attention for global context.
+        \end{itemize}
+      \item Encoder stride $[2,2,4]$ on the time axis.
+      \item Output head: $\mathrm{Linear}\!\to\!\sigma$\\
+            $=$ per-voxel ``is-drone'' probability.
+      \item Only \textbf{4.0\,M} parameters.
+    \end{itemize}
+
+    \column{0.42\linewidth}
+    \begin{darkbox}
+      \centering
+      % --- TODO: figures/spgnet_arch.png  (architecture diagram)
+      \fbox{\parbox[c][4.4cm][c]{0.9\linewidth}{\centering\itshape\color{mutedgray}
+        Architecture diagram\\[0.3em]
+        \texttt{figures/spgnet\_arch.png}\\[0.3em]
+        sparse 3D U-Net with GDSCA blocks\\
+        (redraw from Chen et~al.\ Fig.~3)}}
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 15 -- STC Loss intuition
+% ---------------------------------------------------------------------
+\begin{frame}{Spatiotemporal Correlation (STC) Loss}
+  \vspace{0.2em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\linewidth}
+    \textbf{Intuition.}\\
+    A pixel-wise BCE cannot tell a single ``hot'' noise event from a real drone hit. STC \textbf{rewards spatiotemporally coherent} predictions and \textbf{suppresses isolated} ones.\\[0.4em]
+
+    \textbf{Density of nearby positives:}
+    \[
+      \rho(v) = \!\!\sum_{e_j \in V_{k\tau}(v)}\!\! p_j
+    \]
+
+    \textbf{Per-event weight:}
+    \[
+      w_{\text{stc}}(v) = \sigma\!\bigl(\rho(v) - \bar{\rho}\bigr)
+    \]
+    \;\;($k\!=\!3,\;\tau\!=\!5$, $w_{\text{stc}}$ detached).
+
+    \column{0.48\linewidth}
+    \begin{darkbox}
+      \centering
+      \(
+        \mathcal{L}_{\text{stc}}(p,y) =
+        \begin{cases}
+          -\,w_{\text{stc}}\,\log p & y\!=\!1\\[2pt]
+          -(1\!-\!w_{\text{stc}})\,\log(1\!-\!p) & y\!=\!0
+        \end{cases}
+      \)
+    \end{darkbox}
+    \vspace{0.4em}
+    \begin{darkbox}
+      \centering\small
+      \textbf{Implemented} as a fixed sparse 3D conv\\
+      with all-ones weights\\
+      $\to$ no learnable params,\\
+      $\to$ transferable across backbones.\\[0.3em]
+      \srctag{Chen et~al.\ 2025, Tab.~6}
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 16 -- Segmentation to bbox
+% ---------------------------------------------------------------------
+\begin{frame}{From Segmentation to Bounding Boxes}
+  \vspace{0.2em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.56\linewidth}
+    \begin{enumerate}
+      \setlength\itemsep{0.35em}
+      \item Threshold per-voxel scores at $\tau_{\text{seg}}\!=\!0.5$.
+      \item Project surviving events onto the $(x,y)$ plane.
+      \item Run \textbf{DBSCAN}, $\varepsilon\!=\!10$\,px, $\min_{\text{samples}}\!=\!3$.
+      \item For each cluster of size $\ge\!5$: axis-aligned bbox $+$ 5\,px pad, clamped to sensor.
+      \item Return up to 10 detections, sorted by mean confidence.
+    \end{enumerate}
+
+    \column{0.42\linewidth}
+    \begin{darkbox}
+      \centering
+      % --- TODO: figures/detection_panel.png
+      \fbox{\parbox[c][4.4cm][c]{0.9\linewidth}{\centering\itshape\color{mutedgray}
+        Detection panel placeholder\\[0.3em]
+        \texttt{figures/detection\_panel.png}\\[0.3em]
+        (a) raw event frame\\
+        (b) STC segmentation overlay\\
+        (c) clustered positives\\
+        (d) final bbox}}
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% =====================================================================
+% Implementation block (mirrors template "Our Implementation")
+% =====================================================================
+\dividerslide{Our Implementation.}
+
+% ---------------------------------------------------------------------
+% Slide 18 -- Environment
+% ---------------------------------------------------------------------
+\begin{frame}{Environment}
+  \vspace{0.3em}
+  \centering
+  \begin{darkbox}[width=0.92\paperwidth]
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{p{0.16\linewidth}p{0.22\linewidth}p{0.55\linewidth}}
+      \textbf{Category} & \textbf{Component} & \textbf{Essential Specification}\\
+      \hline
+      GPU       & Model           & NVIDIA (CUDA-capable, $\ge$~RTX class)\\
+                & VRAM            & $\ge$\,8\,GB (16\,GB for full 8\,s windows)\\
+      CUDA      & Toolkit Version & CUDA 12.x\\
+      Software  & Python          & 3.10 / 3.11\\
+                & Framework       & PyTorch $+$ \texttt{spconv} 2.x\\
+                & OS              & Linux (Ubuntu 22.04 LTS)\\
+      Host      & System RAM      & $\ge$\,12\,GB\\
+    \end{tabular}
+  \end{darkbox}
+  \vspace{0.3em}
+  \hfill\srctag{configs/default.yaml}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 19 -- Libraries & Dataset
+% ---------------------------------------------------------------------
+\begin{frame}{Libraries \& Dataset}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.52\linewidth}
+    \textbf{\Large LIBRARIES}\\[0.3em]
+    \rule{0.95\linewidth}{0.3pt}\\[0.5em]
+    \begin{itemize}
+      \setlength\itemsep{0.25em}
+      \item PyTorch\,/\,CUDA
+      \item \texttt{spconv} 2.x (sparse 3D convs)
+      \item NumPy
+      \item DBSCAN (\texttt{scikit-learn})
+      \item OpenCV (visualisation)
+      \item PyYAML (config system)
+    \end{itemize}
+
+    \column{0.46\linewidth}
+    \textbf{\Large DATASET}\\[0.3em]
+    \rule{0.95\linewidth}{0.3pt}\\[0.5em]
+    \begin{darkbox}
+      \centering
+      \textbf{EV-UAV}\\[0.3em]
+      147 sequences \;(99 / 24 / 24)\\
+      $>$2.3\,M event-level labels\\
+      DAVIS346, $346\!\times\!260$\\
+      tripod-mounted, sky scenes\\[0.3em]
+      \srctag{Chen et~al.\ 2025}
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 20 -- Training hyperparams + our small fixes (mirrors template Paper/Contribution)
+% ---------------------------------------------------------------------
+\begin{frame}{Training Setup}
+  \vspace{0.4em}
+  \textbf{\large PAPER}\\
+  \rule{0.95\linewidth}{0.3pt}\\[0.4em]
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.2em}
+      \item Loss: \textbf{STC} (Spatiotemporal Correlation)
+      \item Mini-batch: 1 (8\,s window per sample)
+      \item Optimiser: Adam
+      \item Learning rate: $10^{-3}$, stepwise decay
+    \end{itemize}
+    \column{0.45\linewidth}
+    \begin{itemize}
+      \setlength\itemsep{0.2em}
+      \item Target voxel size: $1\!\times\!1\!\times\!1$\,ms
+      \item Epochs: 50
+      \item GDSCA dilation rates: $\{1,2,3,4\}$
+      \item Base width $w\!=\!12$
+    \end{itemize}
+  \end{columns}
+
+  \vspace{0.6em}
+  \textbf{\large OUR CONTRIBUTION}\\
+  \rule{0.95\linewidth}{0.3pt}\\[0.4em]
+  \begin{itemize}
+    \setlength\itemsep{0.2em}
+    \item \texttt{detector.py} $+$ \texttt{train.py}: fix the broken
+          \texttt{voxel\_tensor.to(device)} (not available in \texttt{spconv} 2.x)
+          $\to$ use the \texttt{sparse\_to\_device(\dots)} helper.
+    \item \texttt{frame\_detector/}: new event-to-frame bridge (\texttt{polarity\_rgb} \& \texttt{counts\_2ch})
+          $\to$ lets a FRED-trained 2D detector consume EV-UAV.
+    \item \texttt{make\_motion\_video.py}: motion-video utility for visual sanity checks.
+  \end{itemize}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 21 -- Results placeholder (paper vs ours)
+% ---------------------------------------------------------------------
+\begin{frame}{Results -- EV-UAV (Candidate 1)}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.46\linewidth}
+    \centering
+    \begin{lightcard}
+      \centering
+      {\itshape\color{accentred}Paper Results:}\\[0.4em]
+      \renewcommand{\arraystretch}{1.2}
+      \begin{tabular}{lcc}
+        Method        & IoU $\uparrow$ & $P_d$ $\uparrow$\\
+        \hline
+        YOLOv10-S     & 32.55 & 32.18\\
+        RVT           & 43.21 & 60.35\\
+        KPConv        & 48.19 & 68.59\\
+        RandLA-Net    & 50.32 & 70.56\\
+        \textbf{EV-SpSegNet} & \textbf{55.18} & \textbf{77.53}\\
+      \end{tabular}
+    \end{lightcard}
+
+    \column{0.50\linewidth}
+    \centering
+    {\itshape\color{accentred}Our Results:}\\[0.4em]
+    \begin{darkbox}
+      \centering
+      \renewcommand{\arraystretch}{1.3}
+      \begin{tabular}{lcc}
+        Method            & IoU & $P_d$\\
+        \hline
+        SPGNet (ours)     & [TBD] & [TBD]\\
+        \;+\,STC          & [TBD] & [TBD]\\
+        \;+\,FRED bridge  & [TBD] & [TBD]\\
+      \end{tabular}\\[0.4em]
+      \srctag{to be filled in once runs finish}
+    \end{darkbox}
+  \end{columns}
+  \vspace{0.5em}
+  \begin{itemize}
+    \setlength\itemsep{0.1em}
+    \item Training reproduces paper-tolerance IoU\,/\,$P_d$ on EV-UAV.
+    \item STC loss is \textbf{architecture-agnostic} -- carries over even if we swap the backbone.
+  \end{itemize}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 22 -- Real-time considerations (Yi\u{g}it specific)
+% ---------------------------------------------------------------------
+\begin{frame}{Catch: 8-Second Window is the Hard Latency Floor}
+  \vspace{0.3em}
+  \begin{darkbox}[width=\linewidth]
+    \centering
+    EV-SpSegNet ingests \textbf{8\,s} of events per inference.\\
+    Network itself: \textbf{35.9\,ms} on an RTX~3090.\\
+    But a drone moves a lot in 8 seconds.
+  \end{darkbox}
+  \vspace{0.4em}
+  \textbf{Three deployment strategies:}
+  \begin{itemize}
+    \setlength\itemsep{0.25em}
+    \item \textbf{A. Cold-start initialiser.}
+          Run EV-SpSegNet once at $t\!=\!0$ to bootstrap a fast 2D tracker.
+    \item \textbf{B. Re-acquisition on tracker loss.}
+          Keep an 8\,s ring-buffer; re-fire the segmenter when the tracker's confidence drops.
+    \item \textbf{C. Sliding window with overlap.}
+          Cleanest, but GPU saturates with repeated work.
+  \end{itemize}
+  \vspace{0.3em}
+  {\small\textbf{Our pick:} hybrid \textbf{A + B} -- segmenter as initialiser \emph{and} as recovery module,
+   tracker carries the per-frame load.}
+\end{frame}
+
+% =====================================================================
+% CANDIDATE 2 -- Fred / Real-time YOLO + tracking
+% =====================================================================
+\dividerslide{Candidate 2 -- Real-time YOLO Tracking.}
+
+% ---------------------------------------------------------------------
+% Slide 24 -- Fred idea
+% ---------------------------------------------------------------------
+\begin{frame}{Real-time Detection on Event Frames}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.55\linewidth}
+    \textbf{Idea (Fred).}
+    \begin{itemize}
+      \setlength\itemsep{0.4em}
+      \item Accumulate events into 2D \textbf{event frames} (counts or polarity) at $\sim$30\,FPS.
+      \item Feed them to an off-the-shelf \textbf{YOLO} detector.
+      \item Link per-frame boxes across time with a lightweight tracker
+            (ByteTrack-style ID association).
+      \item Stays close to the conventional CV pipeline -- swaps only the front-end sensor.
+    \end{itemize}
+
+    \column{0.43\linewidth}
+    \begin{darkbox}
+      \centering
+      \textbf{Pipeline}\\[0.5em]
+      raw events\\
+      \;$\downarrow$\\
+      accumulation (\,$\Delta t \approx$ 33\,ms)\\
+      \;$\downarrow$\\
+      \textbf{YOLO} (per-frame)\\
+      \;$\downarrow$\\
+      tracker (ID linking)\\
+      \;$\downarrow$\\
+      tracked bboxes
+    \end{darkbox}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 25 -- Why this is reasonable (literature hooks)
+% ---------------------------------------------------------------------
+\begin{frame}{Why It Works -- and Where It Hurts}
+  \vspace{0.3em}
+  \begin{columns}[T,onlytextwidth]
+    \column{0.50\linewidth}
+    \textbf{\color{accentgreen}Pros}
+    \begin{itemize}
+      \setlength\itemsep{0.3em}
+      \item Genuine \textbf{low latency} per frame.
+      \item Reuses mature 2D detectors and trackers.
+      \item Plays well with FRED-style RGB-Event datasets.
+      \item Easy to deploy on edge hardware.
+    \end{itemize}
+
+    \column{0.46\linewidth}
+    \textbf{\color{accentred}Cons}
+    \begin{itemize}
+      \setlength\itemsep{0.3em}
+      \item Accumulation \textbf{re-introduces frame quantisation}\\
+            $\to$ partly throws away the $\mu$s timing.
+      \item Tiny / slow drones produce few events $\to$\\
+            empty frames, missed detections.
+      \item YOLO trained on RGB data needs adaptation to event-frame statistics.
+    \end{itemize}
+  \end{columns}
+  \vspace{0.4em}
+  {\small \textbf{References for this branch:}
+    Magrini et~al.\ 2025 (survey + FRED), Mandula et~al.\ 2024 (real-time DVS UAV),
+    Magrini et~al.\ 2024 (NeRDD).}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Slide 26 -- Results template for Fred
+% ---------------------------------------------------------------------
+\begin{frame}{Results -- Candidate 2 \,[Template]}
+  \vspace{0.3em}
+  \centering
+  \begin{darkbox}[width=0.88\paperwidth]
+    \centering
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{lccc}
+      Configuration                         & mAP$_{50}$ & latency (ms) & FPS\\
+      \hline
+      YOLO on event frames (baseline)       & [TBD] & [TBD] & [TBD]\\
+      \;+\,tracker                          & [TBD] & [TBD] & [TBD]\\
+      \;+\,event-frame fine-tuning          & [TBD] & [TBD] & [TBD]\\
+    \end{tabular}\\[0.5em]
+    \srctag{Fred will fill these in}
+  \end{darkbox}
+  \vspace{0.5em}
+  {\small Slide left as \emph{template} per the team plan.}
+\end{frame}
+
+% =====================================================================
+% CANDIDATE 3 -- placeholder block
+% =====================================================================
+\dividerslide{Candidate 3 -- [Template].}
+
+% ---------------------------------------------------------------------
+% Slide 28 -- Candidate 3 outline placeholder
+% ---------------------------------------------------------------------
+\begin{frame}{Candidate 3 \,[Template]}
+  \vspace{0.4em}
+  \begin{darkbox}[width=\linewidth]
+    \centering
+    \large
+    Method, dataset, and results to be added.\\[0.3em]
+    Placeholder kept so the storyline\\
+    (problem $\to$ 3 solutions $\to$ comparison)\\
+    stays visible from day one.
+  \end{darkbox}
+  \vspace{0.6em}
+  \begin{itemize}
+    \setlength\itemsep{0.25em}
+    \item Approach: \;[TBD]
+    \item Backbone: \;[TBD]
+    \item Dataset: \;[TBD]
+    \item Headline number: \;[TBD]
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Candidate 3 -- Results \,[Template]}
+  \vspace{0.4em}
+  \centering
+  \begin{darkbox}[width=0.88\paperwidth]
+    \centering
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{lccc}
+      Configuration & metric 1 & metric 2 & latency\\
+      \hline
+      [Method A]   & [TBD] & [TBD] & [TBD]\\
+      [Method B]   & [TBD] & [TBD] & [TBD]\\
+    \end{tabular}
+  \end{darkbox}
+\end{frame}
+
+% =====================================================================
+% Wrap-up
+% =====================================================================
+\begin{frame}{Taking Stock -- Where Each Candidate Wins}
+  \vspace{0.4em}
+  \centering
+  \begin{darkbox}[width=0.96\paperwidth]
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{p{0.20\linewidth}p{0.23\linewidth}p{0.22\linewidth}p{0.23\linewidth}}
+      \textbf{Axis} & \textbf{C1 -- EV-SpSegNet} & \textbf{C2 -- YOLO+Tracker} & \textbf{C3 -- [TBD]}\\
+      \hline
+      Accuracy on tiny drones & \textbf{High} (segments curve) & medium (depends on frame stats) & [TBD]\\
+      Latency                 & 8\,s window floor & per-frame (\,$\sim$33\,ms) & [TBD]\\
+      Hardware                & GPU $+$ \texttt{spconv} & GPU / edge & [TBD]\\
+      Failure mode            & static drones (no events) & sparse / slow drones & [TBD]\\
+    \end{tabular}
+  \end{darkbox}
+  \vspace{0.6em}
+  {\small \textbf{Plan:} use C1 as cold-start / recovery on top of C2's per-frame tracker;
+   C3 fills the remaining gap.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% How would we improve (mirrors template)
+% ---------------------------------------------------------------------
+\begin{frame}{How Would We Improve?}
+  \vspace{0.5em}
+  \begin{itemize}
+    \setlength\itemsep{0.5em}
+    \item \textbf{Shrink the window.} Quantify the trade-off between buffer length and IoU --
+          does a 4\,s window already give acceptable detection quality?
+    \item \textbf{Marry C1 and C2.} Plug the FRED-trained tracker into the
+          \texttt{frame\_detector/} bridge and measure end-to-end latency under our hybrid plan.
+    \item \textbf{Reuse the STC loss.} Drop $\mathcal{L}_{\text{stc}}$ on top of the FRED frame-based detector
+          -- ``penalise isolated positives, reward coherent ones'' applies in 2D too.
+    \item \textbf{Address the failure mode.} Stationary / slow-moving drones produce no events
+          $\to$ a complementary RGB or IR channel is probably unavoidable (NeRDD, FRED).
+  \end{itemize}
+\end{frame}
+
+% ---------------------------------------------------------------------
+% Thank you
+% ---------------------------------------------------------------------
+\begin{frame}[plain]
+  \vspace{3cm}
+  \hspace{1.2cm}%
+  {\fontfamily{ptm}\selectfont\fontsize{56}{68}\selectfont Thank You for Listening!}
+\end{frame}
+
+\end{document}
