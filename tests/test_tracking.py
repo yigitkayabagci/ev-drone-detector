@@ -190,7 +190,7 @@ class _SliceDetector:
         self.calls: list[dict] = []
         self.config = _StubCfg()
 
-    def detect(self, features, coords):
+    def detect(self, features, coords, extrapolate_to_t=None):
         f = features.numpy() if hasattr(features, "numpy") else np.asarray(features)
         c = coords.numpy() if hasattr(coords, "numpy") else np.asarray(coords)
         self.calls.append({
@@ -198,6 +198,7 @@ class _SliceDetector:
             "t_feat_max": float(f[:, 2].max()) if f.shape[0] else 0.0,
             "t_coord_max": int(c[:, 2].max()) if c.shape[0] else 0,
             "xy_mean": (float(c[:, 0].mean()), float(c[:, 1].mean())) if c.shape[0] else (0.0, 0.0),
+            "extrapolate_to_t": extrapolate_to_t,
         })
         if c.shape[0] == 0:
             return []
@@ -259,3 +260,42 @@ def test_stream_mode_overlapping_stride_produces_more_windows():
         window_us=8_000_000, stride_us=4_000_000,
     )
     assert len(overlap) > len(no_overlap)
+
+
+def test_extrapolation_target_passed_to_detector():
+    """Default extrapolate=True must push target_t = whole_t - 1 down to detect()."""
+    det = _SliceDetector()
+    tracker = SlidingWindowTracker(det)  # extrapolate defaults to True
+
+    n = 200
+    times_us = np.linspace(0, 8_000_000 - 1, n).astype(np.int64)
+    coords = np.zeros((n, 3), dtype=np.int64)
+    coords[:, 0] = 100
+    coords[:, 1] = 50
+    features = np.zeros((n, 4), dtype=np.float32)
+
+    tracker.track_event_stream(
+        features, coords, times_us,
+        window_us=8_000_000, stride_us=8_000_000,
+    )
+    assert det.calls, "detector should have been called"
+    assert det.calls[0]["extrapolate_to_t"] == float(_StubSensor.whole_t - 1)
+
+
+def test_extrapolation_disabled_passes_none():
+    """extrapolate=False must pass None so the legacy trail bbox is emitted."""
+    det = _SliceDetector()
+    tracker = SlidingWindowTracker(det, extrapolate=False)
+
+    n = 200
+    times_us = np.linspace(0, 8_000_000 - 1, n).astype(np.int64)
+    coords = np.zeros((n, 3), dtype=np.int64)
+    coords[:, 0] = 100
+    coords[:, 1] = 50
+    features = np.zeros((n, 4), dtype=np.float32)
+
+    tracker.track_event_stream(
+        features, coords, times_us,
+        window_us=8_000_000, stride_us=8_000_000,
+    )
+    assert det.calls and det.calls[0]["extrapolate_to_t"] is None

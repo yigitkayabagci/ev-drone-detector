@@ -79,9 +79,13 @@ class TrackingConfig:
     iou_threshold: float = 0.3
     max_age: int = 3
     min_hits: int = 1
+    # When True, the tracker asks the detector to fit a linear motion model
+    # per cluster and emit the bbox at the *end* of the window instead of
+    # the 8-second trail.
+    extrapolate: bool = True
     # Stream-mode sliding window (used only by track_event_stream)
     window_us: int = 8_000_000
-    stride_us: int = 4_000_000
+    stride_us: int = 1_000_000
     # Sequence-mode (used by track_npz_sequence): every Nth file
     npz_stride: int = 1
 

@@ -40,6 +40,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--iou-threshold", type=float, default=None)
     parser.add_argument("--max-age", type=int, default=None)
     parser.add_argument("--min-hits", type=int, default=None)
+    parser.add_argument("--extrapolate", dest="extrapolate", action="store_true", default=None,
+                        help="Fit linear motion per cluster and emit bbox at window end")
+    parser.add_argument("--no-extrapolate", dest="extrapolate", action="store_false",
+                        help="Emit raw trail bbox (no motion fit)")
     # Sequence mode
     parser.add_argument("--npz-stride", type=int, default=None,
                         help="(sequence) process every Nth .npz file")
@@ -74,6 +78,7 @@ def main() -> None:
         iou_threshold=_resolve(args.iou_threshold, tcfg.iou_threshold),
         max_age=_resolve(args.max_age, tcfg.max_age),
         min_hits=_resolve(args.min_hits, tcfg.min_hits),
+        extrapolate=_resolve(args.extrapolate, tcfg.extrapolate),
     )
 
     input_path = Path(args.input)

@@ -52,8 +52,11 @@ tracking:
   iou_threshold: 0.3           # Min IoU to inherit an existing track ID
   max_age: 3                   # Windows a track may go unmatched before deletion
   min_hits: 1                  # Min hits before a track shows as active
+  # When true, per-cluster linear motion fit → bbox at window end (drone's
+  # current position) instead of the 8-second trail.
+  extrapolate: true
   # Stream-mode sliding window (track_event_stream)
   window_us: 8000000           # Window length (microseconds) — matches SPGNet training horizon
-  stride_us: 4000000           # Window stride (microseconds); stride < window = overlap
+  stride_us: 1000000           # Window stride (microseconds); 1s = one bbox per second
   # Sequence-mode (track_npz_sequence)
   npz_stride: 1                # Process every Nth .npz file

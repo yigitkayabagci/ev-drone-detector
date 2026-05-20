@@ -141,3 +141,77 @@ def test_bbox_clamping():
             assert y1 >= 0
             assert x2 <= 345
             assert y2 <= 259
+
+
+def test_extrapolate_moving_cluster_to_window_end():
+    """Linear motion fit recovers a drone's position at target_t.
+
+    A drone moves from (100, 100) at t=0 to (180, 100) at t=8000 (no noise).
+    Extrapolating to t=7999 must put the bbox center near (180, 100), not
+    at the trail centroid (~140, 100).
+    """
+    rng = np.random.RandomState(0)
+    n = 200
+    t = np.linspace(0, 8000, n, dtype=np.float64)
+    x = 100.0 + (80.0 / 8000.0) * t + rng.normal(scale=0.5, size=n)
+    y = 100.0 + rng.normal(scale=0.5, size=n)
+    events_xy = np.stack([x, y], axis=1)
+
+    detections = cluster_events_to_bbox(
+        events_xy,
+        events_t=t,
+        extrapolate_to_t=7999.0,
+        eps=10.0, min_samples=3, min_cluster_size=5,
+        bbox_padding=0,
+    )
+    assert len(detections) == 1
+    det = detections[0]
+    cx, cy = det["center"]
+    assert abs(cx - 180) < 5, f"extrapolated cx={cx}, expected ~180"
+    assert abs(cy - 100) < 5
+    # Velocity should be ~ (80/8000, 0) = (0.01, 0)
+    vx, vy = det["velocity"]
+    assert abs(vx - 0.01) < 0.002
+    assert abs(vy) < 0.01
+
+
+def test_extrapolate_static_cluster_falls_back_to_centroid():
+    """A cluster at one timestamp has no temporal spread → trail centroid."""
+    rng = np.random.RandomState(0)
+    events_xy = rng.normal(loc=[50, 50], scale=2, size=(40, 2))
+    events_t = np.full(40, 1000.0)
+
+    detections = cluster_events_to_bbox(
+        events_xy,
+        events_t=events_t,
+        extrapolate_to_t=7999.0,
+        eps=10.0, min_samples=3, min_cluster_size=5,
+    )
+    assert len(detections) == 1
+    cx, cy = detections[0]["center"]
+    assert abs(cx - 50) < 5
+    assert abs(cy - 50) < 5
+    # Zero velocity in the degenerate-fit branch
+    assert detections[0]["velocity"] == [0.0, 0.0]
+
+
+def test_extrapolation_changes_bbox_vs_trail():
+    """Same cluster: trail bbox vs extrapolated bbox should differ in center."""
+    rng = np.random.RandomState(1)
+    n = 200
+    t = np.linspace(0, 8000, n, dtype=np.float64)
+    x = 50.0 + 0.02 * t + rng.normal(scale=0.3, size=n)
+    y = 50.0 + rng.normal(scale=0.3, size=n)
+    events_xy = np.stack([x, y], axis=1)
+
+    trail = cluster_events_to_bbox(events_xy, eps=10.0, min_samples=3, min_cluster_size=5)
+    extra = cluster_events_to_bbox(
+        events_xy, events_t=t, extrapolate_to_t=7999.0,
+        eps=10.0, min_samples=3, min_cluster_size=5,
+    )
+    assert len(trail) == 1 and len(extra) == 1
+    # Extrapolated center must be further right than the trail centroid.
+    assert extra[0]["center"][0] > trail[0]["center"][0] + 20
+    # "velocity" key is present only on the extrapolated path.
+    assert "velocity" not in trail[0]
+    assert "velocity" in extra[0]

@@ -76,15 +76,21 @@ class DroneDetector:
         self,
         features: torch.Tensor | np.ndarray,
         coords: torch.Tensor | np.ndarray,
+        extrapolate_to_t: float | None = None,
     ) -> list[dict]:
         """Detect drones in a single event stream.
 
         Args:
             features: (N, 4) event features [x_norm, y_norm, t_norm, polarity].
             coords: (N, 3) integer voxel coordinates [x, y, t].
+            extrapolate_to_t: If set, fit a linear motion model per cluster
+                and emit a bbox at the predicted position at this voxel-t
+                (e.g. `sensor.whole_t - 1` for "end of window"). When None,
+                the legacy trail bbox is returned.
 
         Returns:
             List of detection dicts with 'bbox', 'score', 'num_events', 'center'.
+            Includes 'velocity' [vx, vy] when extrapolation is enabled.
         """
         if isinstance(features, np.ndarray):
             features = torch.from_numpy(features).float()
@@ -113,6 +119,7 @@ class DroneDetector:
             coords=coords,
             p2v_map=p2v_map.cpu(),
             threshold=det_cfg.seg_threshold,
+            extrapolate_to_t=extrapolate_to_t,
             eps=det_cfg.cluster_eps,
             min_samples=det_cfg.cluster_min_samples,
             min_cluster_size=det_cfg.min_cluster_size,
@@ -124,11 +131,16 @@ class DroneDetector:
         return detections
 
     @torch.no_grad()
-    def detect_from_npz(self, npz_path: str | Path) -> list[dict]:
+    def detect_from_npz(
+        self,
+        npz_path: str | Path,
+        extrapolate_to_t: float | None = None,
+    ) -> list[dict]:
         """Detect drones from an EV-UAV .npz file.
 
         Args:
             npz_path: Path to .npz file with 'evs_norm' and 'ev_loc' arrays.
+            extrapolate_to_t: See `detect()`.
 
         Returns:
             List of detection dicts.
@@ -136,4 +148,4 @@ class DroneDetector:
         data = np.load(str(npz_path), allow_pickle=True)
         features = torch.from_numpy(data["evs_norm"][:, 0:4].astype(np.float32))
         coords = torch.from_numpy(data["ev_loc"].astype(np.int64))
-        return self.detect(features, coords)
+        return self.detect(features, coords, extrapolate_to_t=extrapolate_to_t)

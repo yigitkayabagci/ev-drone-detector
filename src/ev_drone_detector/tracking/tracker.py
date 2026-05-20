@@ -69,15 +69,29 @@ class SlidingWindowTracker:
         iou_threshold: float = 0.3,
         max_age: int = 3,
         min_hits: int = 1,
+        extrapolate: bool = True,
     ):
         self.detector = detector
         self.iou_threshold = iou_threshold
         self.max_age = max_age
         self.min_hits = min_hits
+        self.extrapolate = extrapolate
 
         self.tracks: list[Track] = []
         self._next_id = 1
         self._window_idx = 0
+
+    @property
+    def _extrapolation_target(self) -> float | None:
+        """Voxel-t at which to predict each window's bbox.
+
+        Returns the last in-range voxel-t of the SPGNet training window
+        (`whole_t - 1`) so a sliding-window track reports the drone's
+        position at the *end* of each window instead of its 8-second trail.
+        """
+        if not self.extrapolate:
+            return None
+        return float(self.detector.config.sensor.whole_t - 1)
 
     def reset(self) -> None:
         self.tracks = []
@@ -164,10 +178,11 @@ class SlidingWindowTracker:
             raise ValueError(f"stride must be >= 1, got {stride}")
 
         self.reset()
+        target_t = self._extrapolation_target
         results = []
         selected = list(npz_paths)[::stride]
         for i, path in enumerate(selected):
-            detections = self.detector.detect_from_npz(path)
+            detections = self.detector.detect_from_npz(path, extrapolate_to_t=target_t)
             active = self.update(detections)
             results.append({
                 "window": i,
@@ -184,7 +199,7 @@ class SlidingWindowTracker:
         coords: np.ndarray | torch.Tensor,
         times_us: np.ndarray | torch.Tensor,
         window_us: int = 8_000_000,
-        stride_us: int = 4_000_000,
+        stride_us: int = 1_000_000,
     ) -> list[dict]:
         """Slide an 8-second window across a long event stream.
 
@@ -226,6 +241,7 @@ class SlidingWindowTracker:
         voxel_step_us = window_us / float(whole_t)
 
         self.reset()
+        target_t = self._extrapolation_target
         results: list[dict] = []
 
         t_start = int(ts.min())
@@ -261,6 +277,7 @@ class SlidingWindowTracker:
             detections = self.detector.detect(
                 torch.from_numpy(win_feats),
                 torch.from_numpy(win_coords),
+                extrapolate_to_t=target_t,
             )
             active = self.update(detections)
             results.append({
