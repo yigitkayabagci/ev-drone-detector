@@ -75,6 +75,18 @@ class DetectionConfig:
 
 
 @dataclass
+class TrackingConfig:
+    iou_threshold: float = 0.3
+    max_age: int = 3
+    min_hits: int = 1
+    # Stream-mode sliding window (used only by track_event_stream)
+    window_us: int = 8_000_000
+    stride_us: int = 4_000_000
+    # Sequence-mode (used by track_npz_sequence): every Nth file
+    npz_stride: int = 1
+
+
+@dataclass
 class Config:
     model: ModelConfig = field(default_factory=ModelConfig)
     sensor: SensorConfig = field(default_factory=SensorConfig)
@@ -82,6 +94,7 @@ class Config:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     loss: LossConfig = field(default_factory=LossConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
+    tracking: TrackingConfig = field(default_factory=TrackingConfig)
 
 
 def _update_dataclass(dc: Any, d: dict) -> None:

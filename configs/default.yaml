@@ -47,3 +47,13 @@ detection:
   cluster_min_samples: 3       # DBSCAN min_samples
   bbox_padding: 5              # Padding around detected bbox (pixels)
   max_detections: 10           # Maximum detections per frame
+
+tracking:
+  iou_threshold: 0.3           # Min IoU to inherit an existing track ID
+  max_age: 3                   # Windows a track may go unmatched before deletion
+  min_hits: 1                  # Min hits before a track shows as active
+  # Stream-mode sliding window (track_event_stream)
+  window_us: 8000000           # Window length (microseconds) — matches SPGNet training horizon
+  stride_us: 4000000           # Window stride (microseconds); stride < window = overlap
+  # Sequence-mode (track_npz_sequence)
+  npz_stride: 1                # Process every Nth .npz file
