@@ -79,3 +79,120 @@ def draw_detections(
         cv2.putText(out, score_text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX,
                     0.4, color, 1)
     return out
+
+
+# Fixed BGR palette — distinct hues, cycles for >8 tracks. Indexed by
+# (track_id - 1) so the first track gets the first color.
+_TRACK_PALETTE: tuple[tuple[int, int, int], ...] = (
+    (0, 255, 0),       # green
+    (0, 165, 255),     # orange
+    (255, 0, 255),     # magenta
+    (255, 255, 0),     # cyan
+    (0, 0, 255),       # red
+    (255, 0, 0),       # blue
+    (0, 255, 255),     # yellow
+    (128, 0, 128),     # purple
+)
+
+
+def color_for_track(track_id: int) -> tuple[int, int, int]:
+    """Deterministic BGR color for a track ID (cycles through 8 hues)."""
+    return _TRACK_PALETTE[(int(track_id) - 1) % len(_TRACK_PALETTE)]
+
+
+def draw_tracks(
+    frame: np.ndarray,
+    active_tracks: list[dict],
+    trails: dict[int, list[tuple[float, float]]] | None = None,
+    thickness: int = 2,
+    show_velocity: bool = False,
+) -> np.ndarray:
+    """Render tracked drones on a frame, one color per track ID.
+
+    Args:
+        frame: (H, W, 3) BGR image.
+        active_tracks: Per-window output of `SlidingWindowTracker.update`.
+            Each dict needs at least 'track_id', 'bbox', 'score'.
+        trails: Optional {track_id: [(cx, cy), ...]} — recent centers per
+            track, oldest first. Drawn as a polyline that brightens toward
+            the present.
+        thickness: Bbox line thickness.
+        show_velocity: If True and an active track carries a 'velocity'
+            field (set by the extrapolating detector), draw a short arrow
+            from the bbox center along the motion direction.
+
+    Returns:
+        New (H, W, 3) image with overlays drawn.
+    """
+    try:
+        import cv2
+    except ImportError:
+        cv2 = None
+
+    out = frame.copy()
+    active_ids = {tr["track_id"] for tr in active_tracks}
+
+    if trails is not None and cv2 is not None:
+        for tid, pts in trails.items():
+            if tid not in active_ids or len(pts) < 2:
+                continue
+            base_color = color_for_track(tid)
+            n = len(pts)
+            for i in range(1, n):
+                alpha = (i + 1) / n  # newer = brighter
+                dim = tuple(int(c * alpha) for c in base_color)
+                p1 = (int(pts[i - 1][0]), int(pts[i - 1][1]))
+                p2 = (int(pts[i][0]), int(pts[i][1]))
+                cv2.line(out, p1, p2, dim, max(1, int(thickness * alpha)))
+
+    for tr in active_tracks:
+        tid = tr["track_id"]
+        x1, y1, x2, y2 = (int(v) for v in tr["bbox"])
+        color = color_for_track(tid)
+
+        if cv2 is not None:
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, thickness)
+            label = f"ID:{tid} s={tr.get('score', 0.0):.2f}"
+            cv2.putText(out, label, (x1, max(y1 - 5, 10)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+            if show_velocity and "velocity" in tr:
+                vx, vy = tr["velocity"]
+                cx = (x1 + x2) // 2
+                cy = (y1 + y2) // 2
+                # Scale so a typical velocity reads as ~20 px arrow.
+                scale = 200.0
+                ex = int(cx + vx * scale)
+                ey = int(cy + vy * scale)
+                cv2.arrowedLine(out, (cx, cy), (ex, ey), color, 1, tipLength=0.3)
+        else:
+            out[y1:y1 + thickness, x1:x2] = color
+            out[y2 - thickness:y2, x1:x2] = color
+            out[y1:y2, x1:x1 + thickness] = color
+            out[y1:y2, x2 - thickness:x2] = color
+
+    return out
+
+
+class TrailBuffer:
+    """Per-track-id ring buffer of recent bbox centers for trail rendering.
+
+    The tracker only reports the *current* bbox per window; the visualizer
+    needs the recent history to draw a trajectory line. Wrap the per-window
+    update in `TrailBuffer.update(active_tracks)` and pass `buffer.trails`
+    to `draw_tracks`.
+    """
+
+    def __init__(self, max_length: int = 20):
+        self.max_length = int(max_length)
+        self.trails: dict[int, list[tuple[float, float]]] = {}
+
+    def update(self, active_tracks: list[dict]) -> None:
+        for tr in active_tracks:
+            tid = int(tr["track_id"])
+            x1, y1, x2, y2 = tr["bbox"]
+            cx = (x1 + x2) / 2.0
+            cy = (y1 + y2) / 2.0
+            buf = self.trails.setdefault(tid, [])
+            buf.append((cx, cy))
+            if len(buf) > self.max_length:
+                del buf[: len(buf) - self.max_length]
