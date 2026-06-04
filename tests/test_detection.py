@@ -2,7 +2,10 @@
 
 import pytest
 import numpy as np
-from ev_drone_detector.detection.clustering import cluster_events_to_bbox
+from ev_drone_detector.detection.clustering import (
+    cluster_events_to_bbox,
+    segmentation_to_detections,
+)
 from ev_drone_detector.utils.eval import _bbox_iou, compute_detection_metrics, compute_iou, compute_accuracy
 
 
@@ -123,6 +126,45 @@ def test_max_detections_limit():
     )
 
     assert len(detections) <= 3
+
+
+def test_segmentation_to_detections_cpu():
+    """segmentation_to_detections must work when predictions/p2v_map devices differ.
+
+    Here everything is on CPU, but the implementation moves predictions to CPU
+    *before* indexing, which is what makes the CUDA path (predictions on GPU,
+    p2v_map on CPU) safe too.
+    """
+    import torch
+
+    rng = np.random.RandomState(0)
+    n = 40
+    xy = rng.normal(loc=[100, 100], scale=2, size=(n, 2)).astype(np.int64)
+    t = np.zeros((n, 1), dtype=np.int64)
+    coords = torch.from_numpy(np.concatenate([xy, t], axis=1))  # (N, 3) = x, y, t
+    p2v_map = torch.arange(n)               # each event in its own voxel
+    predictions = torch.ones(n, 1)          # all positive
+
+    dets = segmentation_to_detections(
+        predictions, coords, p2v_map,
+        threshold=0.5, eps=10.0, min_samples=3, min_cluster_size=5,
+        image_size=(346, 260),
+    )
+    assert len(dets) >= 1
+    assert "bbox" in dets[0] and "score" in dets[0]
+    cx, cy = dets[0]["center"]
+    assert abs(cx - 100) < 25 and abs(cy - 100) < 25
+
+
+def test_segmentation_to_detections_all_negative():
+    """No event above threshold -> empty detection list, no DBSCAN crash."""
+    import torch
+
+    coords = torch.zeros(10, 3, dtype=torch.int64)
+    p2v_map = torch.arange(10)
+    predictions = torch.zeros(10, 1)        # all below threshold
+    dets = segmentation_to_detections(predictions, coords, p2v_map, threshold=0.5)
+    assert dets == []
 
 
 def test_bbox_clamping():

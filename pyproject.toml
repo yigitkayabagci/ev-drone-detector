@@ -21,11 +21,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Pick the spconv wheel whose CUDA matches your PyTorch build (torch.version.cuda).
+# spconv ships its own CUDA runtime, so only a matching NVIDIA driver is needed.
 cuda = [
-    "spconv-cu120>=2.3.6",
+    "spconv-cu120>=2.3.6",   # local CUDA 12.x box (works across 12.x minors)
 ]
 colab = [
-    "spconv-cu118>=2.3.6",
+    # Google Colab (2026) ships PyTorch built for CUDA 12.4 on Python 3.12.
+    # The notebook still auto-detects torch.version.cuda and installs the
+    # matching wheel, so this is just the sensible default for `.[colab]`.
+    "spconv-cu124>=2.3.6",
 ]
 dev = [
     "pytest>=7.4.0",

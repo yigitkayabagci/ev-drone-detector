@@ -124,8 +124,13 @@ def segmentation_to_detections(
     Returns:
         List of detection dicts.
     """
-    # Map voxel predictions to event-level
-    event_scores = predictions.squeeze(-1)[p2v_map].detach().cpu().numpy()
+    # Map voxel predictions to event-level.
+    # Move predictions to CPU *before* indexing so this works regardless of
+    # whether `predictions` lives on CUDA and `p2v_map` on CPU (advanced
+    # indexing requires both operands on the same device).
+    preds_cpu = predictions.squeeze(-1).detach().cpu()
+    p2v_cpu = p2v_map.detach().cpu()
+    event_scores = preds_cpu[p2v_cpu].numpy()
 
     # Threshold
     positive_mask = event_scores >= threshold

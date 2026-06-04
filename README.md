@@ -23,9 +23,19 @@ uv sync --extra cuda --extra dev
 
 ### Google Colab
 
+Use the ready-made notebook `notebooks/colab_train_detect.ipynb` — it detects
+`torch.version.cuda` and installs the matching spconv wheel. Manually, the robust
+flow is:
+
 ```bash
-pip install -e ".[colab,dev]"
+# 1. base deps only (keeps Colab's pre-installed CUDA PyTorch)
+pip install -e ".[dev]"
+# 2. spconv wheel matching the runtime CUDA (Colab 2026 = CUDA 12.4 -> cu124)
+pip install "spconv-cu124>=2.3.6"   # 12.6/13.x -> cu126, 12.0-12.3 -> cu120, 11.8 -> cu118
+# 3. Runtime -> Restart session
 ```
+
+`.[colab]` pins `spconv-cu124` as a convenience default for current Colab.
 
 ### CPU-only (for development/testing)
 

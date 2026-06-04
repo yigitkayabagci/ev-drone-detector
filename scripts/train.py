@@ -46,6 +46,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--synthetic", action="store_true", help="Use synthetic data")
     parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint")
+    # Optional overrides (handy for quick smoke runs on Colab)
+    parser.add_argument("--epochs", type=int, default=None, help="Override training.epochs")
+    parser.add_argument("--val-start-epoch", type=int, default=None,
+                        help="Override training.val_start_epoch (epoch validation/best-ckpt begins)")
+    parser.add_argument("--num-workers", type=int, default=None, help="Override data.num_workers")
     return parser.parse_args()
 
 
@@ -149,6 +154,15 @@ def validate(
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
+
+    # Apply CLI overrides
+    if args.epochs is not None:
+        cfg.training.epochs = args.epochs
+    if args.val_start_epoch is not None:
+        cfg.training.val_start_epoch = args.val_start_epoch
+    if args.num_workers is not None:
+        cfg.data.num_workers = args.num_workers
+
     set_seed(cfg.training.seed)
 
     # Device
@@ -189,7 +203,9 @@ def main() -> None:
         shuffle=True,
         num_workers=cfg.data.num_workers,
         collate_fn=collate_fn,
-        pin_memory=True,
+        # SparseConvTensor has no .pin_memory(); pinning would be a silent no-op
+        # and sparse_to_device moves tensors to the GPU each step anyway.
+        pin_memory=False,
     )
     val_loader = DataLoader(
         val_dataset,
@@ -197,7 +213,9 @@ def main() -> None:
         shuffle=False,
         num_workers=cfg.data.num_workers,
         collate_fn=collate_fn,
-        pin_memory=True,
+        # SparseConvTensor has no .pin_memory(); pinning would be a silent no-op
+        # and sparse_to_device moves tensors to the GPU each step anyway.
+        pin_memory=False,
     )
 
     # Model
@@ -253,6 +271,17 @@ def main() -> None:
             f"lr={scheduler.get_last_lr()[0]:.6f}"
         )
 
+        ckpt_data = {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_metrics": train_metrics,
+        }
+
+        # Always write a `last.pt` so detection has a usable checkpoint even if
+        # training is interrupted before val_start_epoch (e.g. a Colab timeout).
+        torch.save(ckpt_data, save_dir / "last.pt")
+
         # Validate
         if epoch >= cfg.training.val_start_epoch:
             val_metrics = validate(model, val_loader, criterion, device)
@@ -261,15 +290,7 @@ def main() -> None:
                 f"val_iou={val_metrics['iou']:.4f}, "
                 f"val_acc={val_metrics['acc']:.4f}"
             )
-
-            # Save best models
-            ckpt_data = {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "train_metrics": train_metrics,
-                "val_metrics": val_metrics,
-            }
+            ckpt_data["val_metrics"] = val_metrics
 
             if val_metrics["iou"] > best_iou:
                 best_iou = val_metrics["iou"]
@@ -280,6 +301,14 @@ def main() -> None:
                 best_loss = val_metrics["loss"]
                 torch.save(ckpt_data, save_dir / "best_loss.pt")
                 print(f"  Saved best loss model: {best_loss:.4f}")
+
+    # Guarantee a best_iou.pt exists for the detection step even when validation
+    # never ran (val_start_epoch beyond the final epoch, short smoke runs, ...).
+    best_iou_path = save_dir / "best_iou.pt"
+    if not best_iou_path.exists() and (save_dir / "last.pt").exists():
+        import shutil
+        shutil.copyfile(save_dir / "last.pt", best_iou_path)
+        print("No validation checkpoint was written; copied last.pt -> best_iou.pt")
 
     print(f"\nTraining complete. Best IoU: {best_iou:.4f}, Best Loss: {best_loss:.4f}")
 

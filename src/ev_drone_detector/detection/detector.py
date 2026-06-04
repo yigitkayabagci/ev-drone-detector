@@ -64,6 +64,13 @@ class DroneDetector:
     def load_weights(self, path: str | Path) -> None:
         """Load model weights from a checkpoint file."""
         path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Checkpoint not found at {path.resolve()}. "
+                "Train first (scripts/train.py) — it writes checkpoints/last.pt every "
+                "epoch and checkpoints/best_iou.pt once validation runs. For a quick "
+                "run try: python scripts/train.py --epochs 2 --val-start-epoch 1"
+            )
         state_dict = torch.load(path, map_location=self.device, weights_only=True)
         # Handle wrapped state dicts
         if "model_state_dict" in state_dict:

@@ -21,6 +21,7 @@ def voxelize_events(
     coords: torch.Tensor,
     batch_idx: int | torch.Tensor,
     spatial_shape: Sequence[int],
+    batch_size: int | None = None,
 ) -> tuple[spconv.SparseConvTensor, torch.Tensor]:
     """Mean-pool events that land in the same (batch, x, y, t) voxel.
 
@@ -30,6 +31,10 @@ def voxelize_events(
         batch_idx: Either an int (single sample) or an (N,) int tensor with
             the batch index of every event.
         spatial_shape: [W, H, T] padded spatial dimensions for the sparse tensor.
+        batch_size: Number of samples in the batch. If None it is inferred from
+            the coordinates, but the caller should pass it explicitly when
+            collating so that a trailing sample with zero events does not
+            shrink the reported batch size.
 
     Returns:
         voxel_tensor: SparseConvTensor with features (M, C) and indices
@@ -38,6 +43,16 @@ def voxelize_events(
     """
     n = coords.shape[0]
     coords = coords.long().contiguous()
+
+    # Clamp coordinates into the valid range so out-of-range events (e.g. a
+    # mis-calibrated temporal window) cannot produce undefined spconv indices.
+    if n > 0:
+        upper = torch.tensor(
+            [int(spatial_shape[0]) - 1, int(spatial_shape[1]) - 1, int(spatial_shape[2]) - 1],
+            dtype=coords.dtype, device=coords.device,
+        )
+        coords = torch.clamp(coords, min=0)
+        coords = torch.minimum(coords, upper)
 
     if isinstance(batch_idx, int):
         batch_col = torch.full((n, 1), batch_idx, dtype=torch.long, device=coords.device)
@@ -58,12 +73,14 @@ def voxelize_events(
     counts.scatter_add_(0, p2v_map, torch.ones(n, dtype=features.dtype, device=features.device))
     voxel_feats = voxel_feats / counts.clamp(min=1).unsqueeze(1)
 
-    batch_size = int(unique_keys[:, 0].max().item()) + 1
+    if batch_size is None:
+        # Guard the empty case: .max() on an empty tensor raises.
+        batch_size = int(unique_keys[:, 0].max().item()) + 1 if m > 0 else 1
     voxel_tensor = spconv.SparseConvTensor(
         features=voxel_feats,
         indices=unique_keys.int().contiguous(),
         spatial_shape=list(spatial_shape),
-        batch_size=batch_size,
+        batch_size=int(batch_size),
     )
     return voxel_tensor, p2v_map
 
@@ -71,10 +88,18 @@ def voxelize_events(
 def sparse_to_device(
     voxel_tensor: spconv.SparseConvTensor, device: torch.device | str,
 ) -> spconv.SparseConvTensor:
-    """Move a SparseConvTensor to `device` (spconv has no .to() in 2.x)."""
-    voxel_tensor = voxel_tensor.replace_feature(voxel_tensor.features.to(device))
-    voxel_tensor.indices = voxel_tensor.indices.to(device)
-    return voxel_tensor
+    """Move a SparseConvTensor to `device` (spconv has no .to() in 2.x).
+
+    Rebuilds the tensor through the constructor rather than mutating
+    `.indices` in place, which is the documented-safe way to relocate both
+    feature and index tensors together.
+    """
+    return spconv.SparseConvTensor(
+        features=voxel_tensor.features.to(device),
+        indices=voxel_tensor.indices.to(device),
+        spatial_shape=voxel_tensor.spatial_shape,
+        batch_size=voxel_tensor.batch_size,
+    )
 
 
 def collate_events(batch: list[dict], spatial_shape: Sequence[int]) -> dict:
@@ -111,7 +136,9 @@ def collate_events(batch: list[dict], spatial_shape: Sequence[int]) -> dict:
     labels = torch.cat(labels_list, dim=0).float().contiguous()
     batch_idx = torch.cat(batch_idx_list, dim=0)
 
-    voxel_tensor, p2v_map = voxelize_events(features, coords, batch_idx, spatial_shape)
+    voxel_tensor, p2v_map = voxelize_events(
+        features, coords, batch_idx, spatial_shape, batch_size=len(batch)
+    )
 
     out = {
         "voxel_tensor": voxel_tensor,

@@ -82,6 +82,49 @@ def test_voxelize_averaging():
 
 
 @needs_spconv
+def test_collate_trailing_empty_sample():
+    """A trailing sample with 0 events must not shrink the reported batch_size.
+
+    Regression: batch_size was inferred from max(batch_idx), so an empty last
+    sample produced batch_size=1 instead of 2.
+    """
+    from ev_drone_detector.data.event_repr import collate_events
+
+    batch = [
+        {
+            "features": torch.randn(50, 4),
+            "coords": torch.randint(0, 40, (50, 3)),
+            "labels": torch.ones(50),
+        },
+        {  # empty sample
+            "features": torch.zeros(0, 4),
+            "coords": torch.zeros(0, 3, dtype=torch.int64),
+            "labels": torch.zeros(0),
+        },
+    ]
+    result = collate_events(batch, spatial_shape=[100, 100, 100])
+    assert result["voxel_tensor"].batch_size == 2
+    assert result["labels"].shape[0] == 50
+
+
+@needs_spconv
+def test_voxelize_clamps_out_of_range_coords():
+    """Coordinates beyond spatial_shape are clamped instead of corrupting indices."""
+    from ev_drone_detector.data.event_repr import voxelize_events
+
+    features = torch.randn(3, 4)
+    # x, y, t all out of range (and one negative) vs spatial_shape [50, 50, 100]
+    coords = torch.tensor([[60, 10, 10], [10, 70, 10], [-5, 10, 200]], dtype=torch.int64)
+    voxel_tensor, _ = voxelize_events(features, coords, 0, [50, 50, 100])
+
+    idx = voxel_tensor.indices  # [batch, x, y, t]
+    assert int(idx[:, 1].max()) <= 49
+    assert int(idx[:, 2].max()) <= 49
+    assert int(idx[:, 3].max()) <= 99
+    assert int(idx.min()) >= 0
+
+
+@needs_spconv
 def test_collate_events():
     """Test batch collation."""
     from ev_drone_detector.data.event_repr import collate_events

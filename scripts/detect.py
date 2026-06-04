@@ -36,7 +36,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _build_frame(npz_path: Path, detections: list[dict]) -> np.ndarray:
+def _build_frame(
+    npz_path: Path,
+    detections: list[dict],
+    resolution: tuple[int, int] = (346, 260),
+) -> np.ndarray:
     """Render an event frame with bounding boxes drawn on top."""
     from ev_drone_detector.utils.viz import draw_detections, events_to_frame
 
@@ -48,6 +52,7 @@ def _build_frame(npz_path: Path, detections: list[dict]) -> np.ndarray:
         coords[:, 0].astype(float),
         coords[:, 1].astype(float),
         polarity=evs[:, 3],
+        resolution=resolution,
     )
     return draw_detections(frame, detections)
 
@@ -109,7 +114,9 @@ def main() -> None:
             all_results[str(npz_path)] = detections
 
             if args.visualize or writer is not None:
-                frame = _build_frame(npz_path, detections)
+                frame = _build_frame(
+                    npz_path, detections, resolution=tuple(cfg.sensor.resolution)
+                )
 
                 if args.visualize:
                     vis_path = Path(args.vis_dir)

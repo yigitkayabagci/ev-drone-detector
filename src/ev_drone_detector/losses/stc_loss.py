@@ -72,11 +72,13 @@ class STCLoss(nn.Module):
         mean_stc = torch.mean(stc_voxel.features)
         stc_weights = torch.sigmoid(stc_voxel.features - mean_stc)
 
-        # Map voxel weights to event-level and DETACH
-        stc_weights = stc_weights[p2v_map].squeeze().detach()
+        # Map voxel weights to event-level and DETACH.
+        # squeeze(-1) (not bare squeeze) so a single-event batch stays (1,) and
+        # does not collapse to a 0-d scalar.
+        stc_weights = stc_weights[p2v_map].squeeze(-1).detach()
 
         # Map predictions to event-level
-        preds_events = preds[p2v_map].squeeze()
+        preds_events = preds[p2v_map].squeeze(-1)
         preds_events = torch.clamp(preds_events, 0, 1)
 
         # Weighted BCE (NO gamma exponent — matches original code)
