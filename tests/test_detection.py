@@ -174,26 +174,33 @@ def test_segmentation_to_detections_all_negative():
 
 
 def test_events_to_frame_paper_scheme():
-    """White bg, all events dark gray, only the drone (target) events red (BGR)."""
+    """White bg, all events gray, only the drone (target) events red (BGR)."""
     from ev_drone_detector.utils.viz import events_to_frame
 
     xs = np.array([10, 100])  # first is a drone event, second is background
     ys = np.array([10, 100])
-    frame = events_to_frame(xs, ys, resolution=(200, 200), target_xy=np.array([[10, 10]]))
+    frame = events_to_frame(
+        xs, ys, resolution=(200, 200), target_xy=np.array([[10, 10]]),
+        bg_event_color=(110, 110, 110), target_color=(0, 0, 200),
+    )
 
     assert frame.shape == (200, 200, 3) and frame.dtype == np.uint8
-    assert tuple(frame[0, 0]) == (255, 255, 255)      # background white
-    assert tuple(frame[10, 10]) == (0, 0, 255)        # drone event -> red (BGR)
-    assert tuple(frame[100, 100]) == (70, 70, 70)     # background event -> dark gray
+    assert tuple(frame[0, 0]) == (255, 255, 255)        # background white
+    assert tuple(frame[10, 10]) == (0, 0, 200)          # drone event -> red (BGR)
+    assert tuple(frame[100, 100]) == (110, 110, 110)    # background event -> gray
 
 
 def test_events_to_frame_no_target():
-    """With no drone events, all events are dark gray (no red anywhere)."""
+    """With no drone events, all events are gray (no red anywhere)."""
     from ev_drone_detector.utils.viz import events_to_frame
 
-    frame = events_to_frame(np.array([5]), np.array([5]), resolution=(50, 50))
-    assert tuple(frame[5, 5]) == (70, 70, 70)
-    assert not (frame == (0, 0, 255)).all(axis=2).any()  # no red anywhere
+    frame = events_to_frame(
+        np.array([5]), np.array([5]), resolution=(50, 50), bg_event_color=(110, 110, 110),
+    )
+    assert tuple(frame[5, 5]) == (110, 110, 110)
+    # no reddish pixel anywhere (R-dominant)
+    reddish = (frame[:, :, 2] > 150) & (frame[:, :, 0] < 80) & (frame[:, :, 1] < 80)
+    assert not reddish.any()
 
 
 def test_segmentation_returns_positive_events():

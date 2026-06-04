@@ -11,8 +11,8 @@ def events_to_frame(
     resolution: tuple[int, int] = (346, 260),
     target_xy: np.ndarray | None = None,
     bg_color: tuple[int, int, int] = (255, 255, 255),
-    bg_event_color: tuple[int, int, int] = (70, 70, 70),
-    target_color: tuple[int, int, int] = (0, 0, 255),
+    bg_event_color: tuple[int, int, int] = (110, 110, 110),
+    target_color: tuple[int, int, int] = (0, 0, 200),
 ) -> np.ndarray:
     """Render events onto a frame, paper-style (EV-UAV Fig. 1).
 
