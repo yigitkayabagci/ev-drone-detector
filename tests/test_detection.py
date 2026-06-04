@@ -6,7 +6,13 @@ from ev_drone_detector.detection.clustering import (
     cluster_events_to_bbox,
     segmentation_to_detections,
 )
-from ev_drone_detector.utils.eval import _bbox_iou, compute_detection_metrics, compute_iou, compute_accuracy
+from ev_drone_detector.utils.eval import (
+    _bbox_iou,
+    compute_detection_metrics,
+    compute_iou,
+    compute_accuracy,
+    compute_map,
+)
 
 
 def test_cluster_events_empty():
@@ -207,6 +213,43 @@ def test_segmentation_returns_positive_events():
     )
     assert drone_xy.shape == (5, 2)
     assert sorted(drone_xy[:, 0].tolist()) == [5, 6, 7, 8, 9]
+
+
+def test_compute_map_perfect():
+    """Predictions identical to GT -> mAP=1, precision=1, recall=1."""
+    preds = [
+        {"boxes": [[10, 10, 30, 30]], "scores": [0.9]},
+        {"boxes": [[50, 50, 70, 70]], "scores": [0.8]},
+    ]
+    gts = [[[10, 10, 30, 30]], [[50, 50, 70, 70]]]
+    m = compute_map(preds, gts)
+    assert m["map_50"] == 1.0
+    assert m["map_50_95"] == 1.0
+    assert m["precision"] == 1.0
+    assert m["recall"] == 1.0
+    assert m["num_gt"] == 2
+
+
+def test_compute_map_missed_detection():
+    """One GT with no matching prediction -> recall = 0.5."""
+    preds = [
+        {"boxes": [[10, 10, 30, 30]], "scores": [0.9]},
+        {"boxes": [], "scores": []},  # missed the second drone
+    ]
+    gts = [[[10, 10, 30, 30]], [[50, 50, 70, 70]]]
+    m = compute_map(preds, gts)
+    assert m["recall"] == 0.5
+    assert m["precision"] == 1.0
+    assert 0.0 < m["map_50"] <= 0.5 + 1e-6
+
+
+def test_compute_map_false_positive():
+    """An extra prediction with no GT -> precision = 0.5."""
+    preds = [{"boxes": [[10, 10, 30, 30], [200, 200, 220, 220]], "scores": [0.9, 0.7]}]
+    gts = [[[10, 10, 30, 30]]]
+    m = compute_map(preds, gts)
+    assert m["precision"] == 0.5
+    assert m["recall"] == 1.0
 
 
 def test_bbox_clamping():

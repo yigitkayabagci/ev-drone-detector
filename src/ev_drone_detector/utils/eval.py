@@ -118,3 +118,115 @@ def _bbox_iou(box1: list[int], box2: list[int]) -> float:
     union = area1 + area2 - inter
 
     return inter / union if union > 0 else 0.0
+
+
+def _ap_from_pr(recall: np.ndarray, precision: np.ndarray) -> float:
+    """VOC all-points Average Precision: area under the precision envelope."""
+    mrec = np.concatenate(([0.0], recall, [1.0]))
+    mpre = np.concatenate(([0.0], precision, [0.0]))
+    # Make precision monotonically decreasing (envelope) from the right.
+    for i in range(len(mpre) - 2, -1, -1):
+        mpre[i] = max(mpre[i], mpre[i + 1])
+    idx = np.where(mrec[1:] != mrec[:-1])[0]
+    return float(np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1]))
+
+
+def _ap_at_iou(all_preds: list, gts_per_image: list, iou_thr: float, npos: int) -> float | None:
+    """AP at one IoU threshold. all_preds: list of (img_idx, score, box) sorted by score desc."""
+    if npos == 0:
+        return None
+    matched = [[False] * len(g) for g in gts_per_image]
+    n = len(all_preds)
+    tp = np.zeros(n)
+    fp = np.zeros(n)
+    for i, (img, _score, box) in enumerate(all_preds):
+        best_iou, best_j = 0.0, -1
+        for j, gb in enumerate(gts_per_image[img]):
+            if matched[img][j]:
+                continue
+            iou = _bbox_iou(box, gb)
+            if iou > best_iou:
+                best_iou, best_j = iou, j
+        if best_j >= 0 and best_iou >= iou_thr:
+            tp[i] = 1
+            matched[img][best_j] = True
+        else:
+            fp[i] = 1
+    tp_c = np.cumsum(tp)
+    fp_c = np.cumsum(fp)
+    recall = tp_c / npos
+    precision = tp_c / np.maximum(tp_c + fp_c, 1e-9)
+    return _ap_from_pr(recall, precision)
+
+
+def _pr_at_iou(preds_per_image: list, gts_per_image: list, iou_thr: float = 0.5) -> tuple[float, float]:
+    """Global precision/recall at one IoU threshold (greedy, score-ordered matching)."""
+    tp = fp = fn = 0
+    for p, gts in zip(preds_per_image, gts_per_image):
+        boxes = p["boxes"]
+        scores = p["scores"]
+        matched = [False] * len(gts)
+        order = list(np.argsort(-np.asarray(scores))) if len(scores) else []
+        for k in order:
+            best_iou, best_j = 0.0, -1
+            for j, gb in enumerate(gts):
+                if matched[j]:
+                    continue
+                iou = _bbox_iou(boxes[k], gb)
+                if iou > best_iou:
+                    best_iou, best_j = iou, j
+            if best_j >= 0 and best_iou >= iou_thr:
+                tp += 1
+                matched[best_j] = True
+            else:
+                fp += 1
+        fn += matched.count(False)
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    return precision, recall
+
+
+def compute_map(
+    preds_per_image: list[dict],
+    gts_per_image: list[list],
+    iou_thresholds: list[float] | None = None,
+) -> dict:
+    """COCO-style mAP for single-class (drone) detection.
+
+    Args:
+        preds_per_image: one dict per image with keys
+            "boxes": list of [x_min, y_min, x_max, y_max]
+            "scores": list of confidence scores (same length)
+        gts_per_image: one list per image of ground-truth [x_min,y_min,x_max,y_max].
+        iou_thresholds: IoU thresholds for the mAP sweep (default 0.5:0.05:0.95).
+
+    Returns:
+        dict with map_50, map_50_95, precision, recall (P/R at IoU 0.5),
+        ap_per_iou, and num_gt.
+    """
+    if iou_thresholds is None:
+        iou_thresholds = [round(0.5 + 0.05 * i, 2) for i in range(10)]  # 0.50..0.95
+
+    all_preds = []
+    for img, p in enumerate(preds_per_image):
+        for b, s in zip(p["boxes"], p["scores"]):
+            all_preds.append((img, float(s), b))
+    all_preds.sort(key=lambda t: t[1], reverse=True)
+
+    npos = sum(len(g) for g in gts_per_image)
+
+    ap_per_iou = {thr: _ap_at_iou(all_preds, gts_per_image, thr, npos) for thr in iou_thresholds}
+    valid_aps = [v for v in ap_per_iou.values() if v is not None]
+    map_50 = ap_per_iou.get(0.5)
+    map_50_95 = float(np.mean(valid_aps)) if valid_aps else 0.0
+
+    precision, recall = _pr_at_iou(preds_per_image, gts_per_image, 0.5)
+
+    return {
+        "map_50": float(map_50) if map_50 is not None else 0.0,
+        "map_50_95": map_50_95,
+        "precision": precision,
+        "recall": recall,
+        "ap_per_iou": {str(k): (None if v is None else float(v)) for k, v in ap_per_iou.items()},
+        "num_gt": int(npos),
+    }
