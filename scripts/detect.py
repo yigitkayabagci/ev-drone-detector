@@ -8,6 +8,13 @@ Usage:
 
 from __future__ import annotations
 
+import os
+
+# spconv/cumm: force the prebuilt CUDA kernels and skip the JIT fallback that
+# breaks on bleeding-edge Colab runtimes. MUST be set before spconv is imported.
+os.environ.setdefault("CUMM_DISABLE_JIT", "1")
+os.environ.setdefault("SPCONV_DISABLE_JIT", "1")
+
 import argparse
 import json
 import sys
