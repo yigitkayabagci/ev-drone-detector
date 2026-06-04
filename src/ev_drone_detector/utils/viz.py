@@ -8,33 +8,47 @@ import numpy as np
 def events_to_frame(
     events_x: np.ndarray,
     events_y: np.ndarray,
-    polarity: np.ndarray | None = None,
     resolution: tuple[int, int] = (346, 260),
+    bboxes: list | None = None,
+    bg_color: tuple[int, int, int] = (255, 255, 255),
+    bg_event_color: tuple[int, int, int] = (70, 70, 70),
+    target_color: tuple[int, int, int] = (0, 0, 255),
 ) -> np.ndarray:
-    """Convert events to a 2D frame image for visualization.
+    """Render events onto a frame, paper-style (EV-UAV Fig. 1).
+
+    White background, background events in dark gray, and events that fall inside
+    any detection bbox drawn in red (the target). Colors are **BGR** to match
+    OpenCV's imwrite / VideoWriter, which is the primary output path in detect.py.
 
     Args:
-        events_x: (N,) x coordinates.
-        events_y: (N,) y coordinates.
-        polarity: (N,) event polarities (+1/-1). If None, all white.
+        events_x: (N,) x pixel coordinates.
+        events_y: (N,) y pixel coordinates.
         resolution: (W, H) image size.
+        bboxes: optional list of [x_min, y_min, x_max, y_max]. Events inside any
+            of these are drawn in `target_color` (the detected drone, red).
+        bg_color: background fill (BGR). Default white.
+        bg_event_color: color of background events (BGR). Default dark gray.
+        target_color: color of events inside a bbox (BGR). Default red.
 
     Returns:
-        (H, W, 3) uint8 image. Gray background, positive=blue, negative=red.
+        (H, W, 3) uint8 BGR image.
     """
     W, H = resolution
-    frame = np.full((H, W, 3), 128, dtype=np.uint8)
+    frame = np.full((H, W, 3), bg_color, dtype=np.uint8)
 
-    x = np.clip(events_x.astype(int), 0, W - 1)
-    y = np.clip(events_y.astype(int), 0, H - 1)
+    x = np.clip(np.asarray(events_x).astype(int), 0, W - 1)
+    y = np.clip(np.asarray(events_y).astype(int), 0, H - 1)
 
-    if polarity is not None:
-        pos_mask = polarity > 0
-        neg_mask = polarity <= 0
-        frame[y[pos_mask], x[pos_mask]] = [255, 200, 200]  # Blue-ish
-        frame[y[neg_mask], x[neg_mask]] = [200, 200, 255]  # Red-ish
-    else:
-        frame[y, x] = [255, 255, 255]
+    # All events: dark gray background points.
+    frame[y, x] = bg_event_color
+
+    # Events inside a detected bbox: red target, painted on top.
+    if bboxes:
+        red = np.zeros(x.shape[0], dtype=bool)
+        for x1, y1, x2, y2 in bboxes:
+            red |= (x >= x1) & (x <= x2) & (y >= y1) & (y <= y2)
+        if red.any():
+            frame[y[red], x[red]] = target_color
 
     return frame
 

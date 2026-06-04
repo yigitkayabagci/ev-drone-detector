@@ -167,6 +167,29 @@ def test_segmentation_to_detections_all_negative():
     assert dets == []
 
 
+def test_events_to_frame_paper_scheme():
+    """White bg, dark-gray background events, red events inside a bbox (BGR)."""
+    from ev_drone_detector.utils.viz import events_to_frame
+
+    xs = np.array([10, 100])  # first inside bbox, second outside
+    ys = np.array([10, 100])
+    frame = events_to_frame(xs, ys, resolution=(200, 200), bboxes=[[5, 5, 20, 20]])
+
+    assert frame.shape == (200, 200, 3) and frame.dtype == np.uint8
+    assert tuple(frame[0, 0]) == (255, 255, 255)      # background white
+    assert tuple(frame[10, 10]) == (0, 0, 255)        # in-bbox event -> red (BGR)
+    assert tuple(frame[100, 100]) == (70, 70, 70)     # outside event -> dark gray
+
+
+def test_events_to_frame_no_bboxes():
+    """With no detections, all events are dark gray (no red)."""
+    from ev_drone_detector.utils.viz import events_to_frame
+
+    frame = events_to_frame(np.array([5]), np.array([5]), resolution=(50, 50))
+    assert tuple(frame[5, 5]) == (70, 70, 70)
+    assert not (frame == (0, 0, 255)).all(axis=2).any()  # no red anywhere
+
+
 def test_bbox_clamping():
     """Test that bboxes are clamped to image bounds."""
     events_xy = np.array([[0, 0], [1, 1], [2, 0], [0, 2], [1, 0]], dtype=float)

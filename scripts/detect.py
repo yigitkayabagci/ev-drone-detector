@@ -52,14 +52,15 @@ def _build_frame(
     from ev_drone_detector.utils.viz import draw_detections, events_to_frame
 
     data = np.load(str(npz_path), allow_pickle=True)
-    evs = data["evs_norm"]
     coords = data["ev_loc"]
 
+    # Paper-style frame: white bg, dark-gray background events, red events inside
+    # detected drone bboxes.
     frame = events_to_frame(
         coords[:, 0].astype(float),
         coords[:, 1].astype(float),
-        polarity=evs[:, 3],
         resolution=resolution,
+        bboxes=[det["bbox"] for det in detections],
     )
     return draw_detections(frame, detections)
 
@@ -134,7 +135,8 @@ def main() -> None:
                         cv2.imwrite(str(out_file), frame)
                     except ImportError:
                         import matplotlib.pyplot as plt
-                        plt.imsave(str(out_file), frame)
+                        # frame is BGR; matplotlib expects RGB
+                        plt.imsave(str(out_file), frame[:, :, ::-1])
                     print(f"  Saved visualization: {out_file}")
 
                 if writer is not None:
