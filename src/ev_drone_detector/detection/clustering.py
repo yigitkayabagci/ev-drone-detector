@@ -107,7 +107,8 @@ def segmentation_to_detections(
     bbox_padding: int = 5,
     max_detections: int = 10,
     image_size: tuple[int, int] = (346, 260),
-) -> list[dict]:
+    return_positive: bool = False,
+):
     """Convert per-voxel predictions to bounding box detections.
 
     Full pipeline: threshold → map to events → project to (x,y) → cluster → bbox.
@@ -120,9 +121,11 @@ def segmentation_to_detections(
         eps, min_samples, min_cluster_size, bbox_padding, max_detections:
             Clustering parameters (see cluster_events_to_bbox).
         image_size: (W, H) sensor resolution.
+        return_positive: If True, also return the (M, 2) pixel coordinates of the
+            positive (drone) events — useful for visualization.
 
     Returns:
-        List of detection dicts.
+        List of detection dicts, or (detections, positive_xy) if return_positive.
     """
     # Map voxel predictions to event-level.
     # Move predictions to CPU *before* indexing so this works regardless of
@@ -132,19 +135,18 @@ def segmentation_to_detections(
     p2v_cpu = p2v_map.detach().cpu()
     event_scores = preds_cpu[p2v_cpu].numpy()
 
-    # Threshold
+    coords_np = coords.cpu().numpy() if hasattr(coords, "cpu") else np.asarray(coords)
+
+    # Threshold → the drone (positive) events
     positive_mask = event_scores >= threshold
+    positive_xy = coords_np[positive_mask, :2]  # (M, 2) [x, y]
+
     if not positive_mask.any():
-        return []
+        return ([], positive_xy) if return_positive else []
 
-    # Get (x, y) coordinates of positive events
-    coords_np = coords.cpu().numpy()
-    positive_xy = coords_np[positive_mask, :2]  # (x, y) only
-    positive_scores = event_scores[positive_mask]
-
-    return cluster_events_to_bbox(
+    detections = cluster_events_to_bbox(
         positive_xy,
-        scores=positive_scores,
+        scores=event_scores[positive_mask],
         eps=eps,
         min_samples=min_samples,
         min_cluster_size=min_cluster_size,
@@ -152,3 +154,4 @@ def segmentation_to_detections(
         max_detections=max_detections,
         image_size=image_size,
     )
+    return (detections, positive_xy) if return_positive else detections

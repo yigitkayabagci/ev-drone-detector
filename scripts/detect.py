@@ -46,21 +46,24 @@ def parse_args() -> argparse.Namespace:
 def _build_frame(
     npz_path: Path,
     detections: list[dict],
+    drone_xy: np.ndarray | None = None,
     resolution: tuple[int, int] = (346, 260),
 ) -> np.ndarray:
-    """Render an event frame with bounding boxes drawn on top."""
+    """Render an event frame, paper-style, with bounding boxes drawn on top.
+
+    White background, all events dark gray, the detected drone events
+    (`drone_xy`) painted red, then green detection boxes.
+    """
     from ev_drone_detector.utils.viz import draw_detections, events_to_frame
 
     data = np.load(str(npz_path), allow_pickle=True)
     coords = data["ev_loc"]
 
-    # Paper-style frame: white bg, dark-gray background events, red events inside
-    # detected drone bboxes.
     frame = events_to_frame(
         coords[:, 0].astype(float),
         coords[:, 1].astype(float),
         resolution=resolution,
-        bboxes=[det["bbox"] for det in detections],
+        target_xy=drone_xy,
     )
     return draw_detections(frame, detections)
 
@@ -123,7 +126,8 @@ def main() -> None:
 
             if args.visualize or writer is not None:
                 frame = _build_frame(
-                    npz_path, detections, resolution=tuple(cfg.sensor.resolution)
+                    npz_path, detections, drone_xy=detector.last_drone_xy,
+                    resolution=tuple(cfg.sensor.resolution),
                 )
 
                 if args.visualize:

@@ -9,26 +9,27 @@ def events_to_frame(
     events_x: np.ndarray,
     events_y: np.ndarray,
     resolution: tuple[int, int] = (346, 260),
-    bboxes: list | None = None,
+    target_xy: np.ndarray | None = None,
     bg_color: tuple[int, int, int] = (255, 255, 255),
     bg_event_color: tuple[int, int, int] = (70, 70, 70),
     target_color: tuple[int, int, int] = (0, 0, 255),
 ) -> np.ndarray:
     """Render events onto a frame, paper-style (EV-UAV Fig. 1).
 
-    White background, background events in dark gray, and events that fall inside
-    any detection bbox drawn in red (the target). Colors are **BGR** to match
-    OpenCV's imwrite / VideoWriter, which is the primary output path in detect.py.
+    White background, all events in dark gray, and the detected drone events
+    (`target_xy` — the model's positive predictions, NOT a whole bbox) painted in
+    red on top. Colors are **BGR** to match OpenCV's imwrite / VideoWriter, the
+    primary output path in detect.py.
 
     Args:
-        events_x: (N,) x pixel coordinates.
-        events_y: (N,) y pixel coordinates.
+        events_x: (N,) x pixel coordinates of ALL events.
+        events_y: (N,) y pixel coordinates of ALL events.
         resolution: (W, H) image size.
-        bboxes: optional list of [x_min, y_min, x_max, y_max]. Events inside any
-            of these are drawn in `target_color` (the detected drone, red).
+        target_xy: optional (M, 2) pixel coords [x, y] of the drone events to
+            paint in `target_color` (red). Only these points turn red.
         bg_color: background fill (BGR). Default white.
-        bg_event_color: color of background events (BGR). Default dark gray.
-        target_color: color of events inside a bbox (BGR). Default red.
+        bg_event_color: color of all (background) events (BGR). Default dark gray.
+        target_color: color of the drone events (BGR). Default red.
 
     Returns:
         (H, W, 3) uint8 BGR image.
@@ -42,13 +43,12 @@ def events_to_frame(
     # All events: dark gray background points.
     frame[y, x] = bg_event_color
 
-    # Events inside a detected bbox: red target, painted on top.
-    if bboxes:
-        red = np.zeros(x.shape[0], dtype=bool)
-        for x1, y1, x2, y2 in bboxes:
-            red |= (x >= x1) & (x <= x2) & (y >= y1) & (y <= y2)
-        if red.any():
-            frame[y[red], x[red]] = target_color
+    # The detected drone events: red, painted on top of the gray.
+    if target_xy is not None and len(target_xy) > 0:
+        txy = np.asarray(target_xy)
+        tx = np.clip(txy[:, 0].astype(int), 0, W - 1)
+        ty = np.clip(txy[:, 1].astype(int), 0, H - 1)
+        frame[ty, tx] = target_color
 
     return frame
 

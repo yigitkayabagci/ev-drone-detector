@@ -44,6 +44,9 @@ class DroneDetector:
         self.model = model.to(device)
         self.model.eval()
         self.config = config
+        # (M, 2) pixel coords of the drone events from the most recent detect()
+        # call, for visualization (paint just these red).
+        self.last_drone_xy = np.empty((0, 2), dtype=np.int64)
 
     @classmethod
     def from_config(
@@ -113,9 +116,9 @@ class DroneDetector:
         # Forward pass
         predictions, _ = self.model(voxel_tensor)
 
-        # Convert to bounding boxes
+        # Convert to bounding boxes; also grab the drone-event coords for viz.
         det_cfg = cfg.detection
-        detections = segmentation_to_detections(
+        detections, drone_xy = segmentation_to_detections(
             predictions=predictions,
             coords=coords,
             p2v_map=p2v_map.cpu(),
@@ -126,7 +129,9 @@ class DroneDetector:
             bbox_padding=det_cfg.bbox_padding,
             max_detections=det_cfg.max_detections,
             image_size=tuple(cfg.sensor.resolution),
+            return_positive=True,
         )
+        self.last_drone_xy = drone_xy
 
         return detections
 

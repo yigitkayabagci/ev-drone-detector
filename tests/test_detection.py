@@ -168,26 +168,45 @@ def test_segmentation_to_detections_all_negative():
 
 
 def test_events_to_frame_paper_scheme():
-    """White bg, dark-gray background events, red events inside a bbox (BGR)."""
+    """White bg, all events dark gray, only the drone (target) events red (BGR)."""
     from ev_drone_detector.utils.viz import events_to_frame
 
-    xs = np.array([10, 100])  # first inside bbox, second outside
+    xs = np.array([10, 100])  # first is a drone event, second is background
     ys = np.array([10, 100])
-    frame = events_to_frame(xs, ys, resolution=(200, 200), bboxes=[[5, 5, 20, 20]])
+    frame = events_to_frame(xs, ys, resolution=(200, 200), target_xy=np.array([[10, 10]]))
 
     assert frame.shape == (200, 200, 3) and frame.dtype == np.uint8
     assert tuple(frame[0, 0]) == (255, 255, 255)      # background white
-    assert tuple(frame[10, 10]) == (0, 0, 255)        # in-bbox event -> red (BGR)
-    assert tuple(frame[100, 100]) == (70, 70, 70)     # outside event -> dark gray
+    assert tuple(frame[10, 10]) == (0, 0, 255)        # drone event -> red (BGR)
+    assert tuple(frame[100, 100]) == (70, 70, 70)     # background event -> dark gray
 
 
-def test_events_to_frame_no_bboxes():
-    """With no detections, all events are dark gray (no red)."""
+def test_events_to_frame_no_target():
+    """With no drone events, all events are dark gray (no red anywhere)."""
     from ev_drone_detector.utils.viz import events_to_frame
 
     frame = events_to_frame(np.array([5]), np.array([5]), resolution=(50, 50))
     assert tuple(frame[5, 5]) == (70, 70, 70)
     assert not (frame == (0, 0, 255)).all(axis=2).any()  # no red anywhere
+
+
+def test_segmentation_returns_positive_events():
+    """return_positive gives the (M,2) drone-event pixel coords for viz."""
+    import torch
+
+    n = 20
+    coords = torch.zeros(n, 3, dtype=torch.int64)
+    coords[:, 0] = torch.arange(n)  # distinct x so we can check
+    p2v_map = torch.arange(n)
+    scores = torch.zeros(n, 1)
+    scores[5:10] = 1.0  # events 5..9 are "drone"
+
+    dets, drone_xy = segmentation_to_detections(
+        scores, coords, p2v_map, threshold=0.5, min_cluster_size=1,
+        min_samples=1, eps=5.0, return_positive=True,
+    )
+    assert drone_xy.shape == (5, 2)
+    assert sorted(drone_xy[:, 0].tolist()) == [5, 6, 7, 8, 9]
 
 
 def test_bbox_clamping():
