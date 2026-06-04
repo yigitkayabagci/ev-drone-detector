@@ -59,6 +59,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val-start-epoch", type=int, default=None,
                         help="Override training.val_start_epoch (epoch validation/best-ckpt begins)")
     parser.add_argument("--num-workers", type=int, default=None, help="Override data.num_workers")
+    parser.add_argument("--save-dir", type=str, default=None,
+                        help="Override training.save_dir (e.g. a mounted Drive path "
+                             "like /content/drive/MyDrive/ev_uav_checkpoints)")
     return parser.parse_args()
 
 
@@ -170,6 +173,8 @@ def main() -> None:
         cfg.training.val_start_epoch = args.val_start_epoch
     if args.num_workers is not None:
         cfg.data.num_workers = args.num_workers
+    if args.save_dir is not None:
+        cfg.training.save_dir = args.save_dir
 
     set_seed(cfg.training.seed)
 
@@ -261,6 +266,7 @@ def main() -> None:
     # Training loop
     save_dir = Path(cfg.training.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Checkpoints -> {save_dir.resolve()}")
 
     best_iou = 0.0
     best_loss = float("inf")
